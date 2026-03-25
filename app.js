@@ -4,16 +4,34 @@
 
 // ============================================================
 // CLUSTERS
+// Elke query heeft twee varianten:
+//   pubmed:  echte boolean met MeSH/tiab-velden — PTSS verplicht
+//   general: voor Semantic Scholar (pure relevantie) en OpenAlex
 // ============================================================
+
+// Verplicht PubMed-anker — zorgt dat alle resultaten PTSS-gerelateerd zijn
+const PUBMED_PTSD_ANCHOR =
+  '("Stress Disorders, Post-Traumatic"[mesh] OR PTSD[tiab] OR ' +
+  '"posttraumatic stress"[tiab] OR "post-traumatic stress"[tiab])';
+
 const CLUSTERS = [
   {
     id: 'differential',
     label: 'Differentiële effectiviteit',
     shortLabel: 'Diff. effect.',
     queries: [
-      'PTSD treatment moderators differential effectiveness',
-      'differential effectiveness trauma-focused therapy EMDR CPT',
-      'PTSD personalized treatment predictor response'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (moderator[tiab] OR predictor[tiab]) AND (psychotherapy[mesh] OR "trauma-focused"[tiab])`,
+        general: 'PTSD treatment moderators predictors differential effectiveness psychotherapy'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (EMDR[tiab] OR "prolonged exposure"[tiab] OR "cognitive processing therapy"[tiab] OR "imagery rescripting"[tiab]) AND ("comparative effectiveness"[tiab] OR "differential effect"[tiab] OR "treatment outcome"[tiab])`,
+        general: 'PTSD EMDR CPT prolonged exposure imagery rescripting differential treatment outcome'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("personalized treatment"[tiab] OR "treatment matching"[tiab] OR "precision psychiatry"[tiab])`,
+        general: 'PTSD personalized treatment matching precision psychiatry'
+      }
     ]
   },
   {
@@ -21,9 +39,18 @@ const CLUSTERS = [
     label: 'Comorbiditeit & contra-indicaties',
     shortLabel: 'Comorbiditeit',
     queries: [
-      'PTSD comorbidity treatment outcome psychotherapy',
-      'complex PTSD dissociation treatment psychotherapy',
-      'PTSD psychosis suicidality personality disorder trauma-focused treatment'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND comorbid*[tiab] AND (psychotherapy[mesh] OR "trauma-focused"[tiab]) AND "treatment outcome"[tiab]`,
+        general: 'PTSD comorbidity trauma-focused psychotherapy treatment outcome'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("complex PTSD"[tiab] OR dissociation[tiab] OR dissociative[tiab]) AND (treatment[tiab] OR psychotherapy[mesh])`,
+        general: 'PTSD complex dissociation dissociative treatment psychotherapy'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("borderline personality"[tiab] OR "personality disorder"[tiab] OR psychosis[tiab] OR suicidal*[tiab] OR "substance use"[tiab] OR "intellectual disabilit"[tiab] OR autism[tiab]) AND ("trauma-focused"[tiab] OR EMDR[tiab] OR "prolonged exposure"[tiab])`,
+        general: 'PTSD borderline personality psychosis suicidality intellectual disability autism trauma-focused treatment'
+      }
     ]
   },
   {
@@ -31,9 +58,18 @@ const CLUSTERS = [
     label: 'Indicatiestelling & klinische besluitvorming',
     shortLabel: 'Indicatiestelling',
     queries: [
-      'PTSD clinical decision making treatment selection trauma-focused',
-      'clinician barriers facilitators trauma-focused therapy implementation',
-      'PTSD treatment preferences beliefs clinician therapist'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("treatment selection"[tiab] OR "treatment indication"[tiab] OR "treatment matching"[tiab] OR "clinical decision"[tiab])`,
+        general: 'PTSD treatment selection indication clinical decision making trauma-focused'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (clinician[tiab] OR therapist[tiab] OR provider[tiab]) AND (barrier*[tiab] OR facilitator*[tiab] OR attitude*[tiab] OR belief*[tiab]) AND "trauma-focused"[tiab]`,
+        general: 'PTSD clinician therapist provider barriers attitudes beliefs trauma-focused'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("treatment preference"[tiab] OR "patient preference"[tiab] OR "shared decision"[tiab]) AND (psychotherapy[mesh] OR "trauma-focused"[tiab])`,
+        general: 'PTSD treatment patient preference shared decision making psychotherapy'
+      }
     ]
   },
   {
@@ -41,8 +77,14 @@ const CLUSTERS = [
     label: 'Acceptability & adverse effects',
     shortLabel: 'Acceptability',
     queries: [
-      'PTSD treatment dropout acceptability patient',
-      'trauma-focused therapy adverse effects deterioration contraindication'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (dropout[tiab] OR attrition[tiab] OR acceptab*[tiab] OR "treatment refusal"[tiab]) AND (psychotherapy[mesh] OR "trauma-focused"[tiab])`,
+        general: 'PTSD treatment dropout attrition acceptability trauma-focused psychotherapy'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("adverse effect"[tiab] OR deteriorat*[tiab] OR contraindication*[tiab] OR "symptom exacerbation"[tiab]) AND "trauma-focused"[tiab]`,
+        general: 'PTSD trauma-focused adverse effects deterioration contraindication symptom exacerbation'
+      }
     ]
   },
   {
@@ -50,8 +92,14 @@ const CLUSTERS = [
     label: 'Behandelkloof & hulpzoekgedrag',
     shortLabel: 'Behandelkloof',
     queries: [
-      'PTSD treatment gap undertreatment barriers access',
-      'PTSD help-seeking treatment utilization guideline adherence'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (undertreat*[tiab] OR "treatment gap"[tiab] OR underutiliz*[tiab] OR "unmet need"[tiab])`,
+        general: 'PTSD treatment gap undertreatment unmet need'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("help-seeking"[tiab] OR "treatment utilization"[tiab] OR "treatment access"[tiab]) AND (barrier*[tiab] OR facilitator*[tiab])`,
+        general: 'PTSD help-seeking treatment utilization access barriers'
+      }
     ]
   },
   {
@@ -59,8 +107,14 @@ const CLUSTERS = [
     label: 'Richtlijn-praktijk gap',
     shortLabel: 'Richtlijn gap',
     queries: [
-      'PTSD guideline implementation evidence-practice gap clinician',
-      'evidence-practice gap trauma-focused therapy science practice'
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND (guideline*[tiab] OR "clinical practice guideline"[mesh]) AND (implementation[tiab] OR adherence[tiab] OR "practice gap"[tiab])`,
+        general: 'PTSD clinical guideline implementation adherence practice gap'
+      },
+      {
+        pubmed:  `${PUBMED_PTSD_ANCHOR} AND ("evidence-based"[tiab] OR "evidence-practice"[tiab]) AND (gap[tiab] OR barrier*[tiab]) AND ("trauma-focused"[tiab] OR psychotherapy[mesh])`,
+        general: 'PTSD evidence-based practice gap barrier trauma-focused psychotherapy'
+      }
     ]
   }
 ];
@@ -158,6 +212,12 @@ function scoreArticle(article) {
 
   // Cap keyword contribution at 60
   score = Math.min(score, 60);
+
+  // Domeincheck: als PTSS/trauma nergens in titel of abstract voorkomt, zware penalty
+  // (vangt off-topic artikelen die door brede SS/OA-matching binnenkomen)
+  const domainTerms = ['ptsd', 'posttraumatic', 'post-traumatic', 'stress disorder', 'trauma'];
+  const hasDomain = domainTerms.some(t => titleText.includes(t) || abstractText.includes(t));
+  if (!hasDomain) score = Math.max(0, score - 45);
 
   // --- Cluster priority (0-20) ---
   score += CLUSTER_PRIORITY[article.cluster] || 5;
@@ -306,9 +366,11 @@ function deduplicateArticles(existing, incoming) {
 }
 
 // ---- API calls ----
-async function searchPubMed(query, fromDate) {
+async function searchPubMed(queryObj, fromDate) {
+  // Use boolean pubmed query if available, else fall back to general string
+  const queryStr = (typeof queryObj === 'object' ? queryObj.pubmed : queryObj) || queryObj;
   const dateFilter = fromDate ? `&mindate=${fromDate}&maxdate=3000/01/01&datetype=pdat` : '';
-  const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=50&retmode=json${dateFilter}`;
+  const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(queryStr)}&retmax=30&retmode=json${dateFilter}`;
   try {
     const searchResp = await fetch(searchUrl);
     if (!searchResp.ok) throw new Error('PubMed search failed');
@@ -343,9 +405,10 @@ async function searchPubMed(query, fromDate) {
   }
 }
 
-async function searchSemanticScholar(query, fromDate) {
+async function searchSemanticScholar(queryObj, fromDate) {
+  const queryStr = (typeof queryObj === 'object' ? queryObj.general : queryObj) || queryObj;
   const yearFilter = fromDate ? `&year=${new Date(fromDate).getFullYear()}-` : '';
-  const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&fields=title,authors,year,externalIds,citationCount,journal,venue,abstract&limit=50${yearFilter}`;
+  const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(queryStr)}&fields=title,authors,year,externalIds,citationCount,journal,venue,abstract&limit=25${yearFilter}`;
   try {
     const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (!resp.ok) throw new Error('Semantic Scholar failed');
@@ -382,9 +445,11 @@ function reconstructOpenAlexAbstract(invertedIndex) {
   return entries.map(e => e[1]).join(' ');
 }
 
-async function searchOpenAlex(query, fromDate) {
+async function searchOpenAlex(queryObj, fromDate) {
+  // OpenAlex supports boolean AND/OR — use general query (already contains PTSD)
+  const queryStr = (typeof queryObj === 'object' ? queryObj.general : queryObj) || queryObj;
   const dateFilter = fromDate ? `,from_publication_date:${fromDate}` : '';
-  const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&filter=type:article${dateFilter}&per-page=50&select=id,title,authorships,publication_year,doi,primary_location,cited_by_count,abstract_inverted_index&mailto=ptss-monitor@example.com`;
+  const url = `https://api.openalex.org/works?search=${encodeURIComponent(queryStr)}&filter=type:article${dateFilter}&per-page=25&select=id,title,authorships,publication_year,doi,primary_location,cited_by_count,abstract_inverted_index&mailto=ptss-monitor@example.com`;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('OpenAlex failed');
@@ -503,7 +568,8 @@ async function runSearch() {
 
   for (const cluster of CLUSTERS) {
     for (const query of cluster.queries) {
-      updateProgress(`${cluster.shortLabel}: "${query.substring(0, 30)}…"`);
+      const queryLabel = typeof query === 'object' ? query.general : query;
+      updateProgress(`${cluster.shortLabel}: "${queryLabel.substring(0, 35)}…"`);
       const [pubmed, semantic, openalex] = await Promise.all([
         searchPubMed(query, fromDate),
         searchSemanticScholar(query, fromDate),
