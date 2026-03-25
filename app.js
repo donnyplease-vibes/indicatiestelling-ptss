@@ -62,8 +62,101 @@ const CLUSTERS = [
   }
 ];
 
+// ============================================================
+// RELEVANCE SCORING
+// Tiers based on the core research question:
+//   "Welke PTSS-patiënten zijn geïndiceerd voor welke behandeling,
+//    en hoe nemen clinici die beslissing?"
+// ============================================================
+const RELEVANCE_PROFILE = {
+  // Tier 1 — kern van de onderzoeksvraag (elk trefwoord: +12 pts in titel, +7 in abstract)
+  tier1: [
+    'treatment selection', 'treatment matching', 'treatment indication',
+    'personalized treatment', 'precision treatment', 'tailored treatment',
+    'individualized treatment', 'treatment moderator', 'moderators of treatment',
+    'differential effectiveness', 'differential efficacy', 'differential response',
+    'who benefits', 'clinical decision', 'decision making', 'treatment algorithm',
+    'treatment recommendation', 'stepped care', 'treatment predictor',
+    'predictor of treatment', 'treatment response predictor',
+    'indicatiestelling', 'treatment suitability',
+  ],
+  // Tier 2 — sterk gerelateerd (elk trefwoord: +6 pts in titel, +3 in abstract)
+  tier2: [
+    'dropout', 'attrition', 'treatment acceptability', 'adverse effect',
+    'deterioration', 'negative effect', 'treatment failure',
+    'comorbidity', 'complex ptsd', 'complex post', 'dissociation',
+    'borderline', 'suicidality', 'substance use',
+    'implementation', 'evidence-practice', 'guideline adherence',
+    'clinician barrier', 'therapist attitude', 'treatment preference',
+    'patient preference', 'shared decision', 'treatment engagement',
+  ],
+  // Tier 3 — context (elk trefwoord: +2 pts in titel, +1 in abstract)
+  tier3: [
+    'ptsd', 'posttraumatic', 'post-traumatic', 'trauma-focused',
+    'emdr', 'prolonged exposure', 'cognitive processing', 'cpt',
+    'trauma therapy', 'psychotherapy', 'treatment outcome',
+    'randomized', 'randomised', 'rct', 'meta-analysis', 'systematic review',
+  ],
+};
+
+// Cluster priority for the research question (0-20)
+const CLUSTER_PRIORITY = {
+  clinical:      20,
+  differential:  17,
+  comorbidity:   14,
+  acceptability: 11,
+  guideline:      9,
+  epidemiology:   5,
+};
+
+function scoreArticle(article) {
+  const titleText   = (article.title   || '').toLowerCase();
+  const abstractText = (abstractCache[articleId(article)] || article.abstract || '').toLowerCase();
+
+  let score = 0;
+
+  // --- Keyword scoring ---
+  for (const [tier, terms] of Object.entries(RELEVANCE_PROFILE)) {
+    const titleW    = tier === 'tier1' ? 12 : tier === 'tier2' ? 6  : 2;
+    const abstractW = tier === 'tier1' ? 7  : tier === 'tier2' ? 3  : 1;
+    for (const term of terms) {
+      if (titleText.includes(term))    score += titleW;
+      if (abstractText.includes(term)) score += abstractW;
+    }
+  }
+
+  // Cap keyword contribution at 60
+  score = Math.min(score, 60);
+
+  // --- Cluster priority (0-20) ---
+  score += CLUSTER_PRIORITY[article.cluster] || 5;
+
+  // --- Citation score (0-10, log-scaled) ---
+  if (article.citations != null && article.citations > 0) {
+    score += Math.min(10, Math.log10(article.citations + 1) * 4);
+  }
+
+  // --- Year recency (0-10) ---
+  const year = parseInt(article.year) || 0;
+  if (year >= 2020) score += 10;
+  else if (year >= 2015) score += 7;
+  else if (year >= 2010) score += 4;
+  else if (year >= 2000) score += 1;
+
+  // Normalize to 0-100
+  return Math.min(100, Math.round(score));
+}
+
+function relevanceTier(score) {
+  if (score >= 60) return 'high';
+  if (score >= 35) return 'medium';
+  if (score >= 15) return 'low';
+  return 'minimal';
+}
+
 // ---- State ----
 let allArticles = [];
+let currentSort = 'relevance'; // 'relevance' | 'date' | 'citations'
 let readSet = new Set();
 let savedSet = new Set();
 let excludedSet = new Set();   // normalized DOIs/titles of library articles
@@ -460,10 +553,25 @@ function renderFilterBar() {
     { id: 'unread',   label: 'Ongelezen' },
     { id: 'excluded', label: `Uitgesloten${excludedCount ? ' (' + excludedCount + ')' : ''}` }
   ];
+  const sorts = [
+    { id: 'relevance', label: '★ Relevantie' },
+    { id: 'date',      label: 'Datum' },
+    { id: 'citations', label: 'Citaties' },
+  ];
   const countLabel = `<span class="count-label" id="article-count"></span>`;
-  bar.innerHTML = filters.map(f =>
-    `<button class="filter-btn${currentFilter === f.id ? ' active' : ''}" onclick="selectFilter('${f.id}')">${f.label}</button>`
-  ).join('') + countLabel;
+  bar.innerHTML =
+    `<div class="filter-row">` +
+    filters.map(f =>
+      `<button class="filter-btn${currentFilter === f.id ? ' active' : ''}" onclick="selectFilter('${f.id}')">${f.label}</button>`
+    ).join('') +
+    countLabel +
+    `</div>` +
+    `<div class="sort-row">` +
+    `<span class="sort-label">Sorteren:</span>` +
+    sorts.map(s =>
+      `<button class="sort-btn${currentSort === s.id ? ' active' : ''}" onclick="selectSort('${s.id}')">${s.label}</button>`
+    ).join('') +
+    `</div>`;
 }
 
 function getFilteredArticles() {
@@ -482,6 +590,17 @@ function getFilteredArticles() {
   }
 
   return articles.sort((a, b) => {
+    if (currentSort === 'relevance') {
+      const diff = scoreArticle(b) - scoreArticle(a);
+      if (diff !== 0) return diff;
+      // Tiebreak: new first, then date
+      if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+      return (b.year || '0').localeCompare(a.year || '0');
+    }
+    if (currentSort === 'citations') {
+      return (b.citations || 0) - (a.citations || 0);
+    }
+    // 'date': new first, then year desc
     if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
     return (b.year || '0').localeCompare(a.year || '0');
   });
@@ -534,6 +653,13 @@ function renderCard(article, idx) {
     ? `<a href="https://doi.org/${article.doi}" target="_blank" rel="noopener">${escHtml(article.title)}</a>`
     : escHtml(article.title);
 
+  const score = scoreArticle(article);
+  const tier  = relevanceTier(score);
+  const tierLabels = { high: '★★★ Hoog', medium: '★★ Relevant', low: '★ Laag', minimal: '' };
+  const relTag = tier !== 'minimal'
+    ? `<span class="tag tag-rel tag-rel-${tier}">${tierLabels[tier]}</span>`
+    : '';
+
   const sourceKey = article.source.toLowerCase().replace(/\s/g, '');
   const sourceTag = `<span class="tag tag-${sourceKey}">${escHtml(article.source)}</span>`;
   const yearTag   = article.year ? `<span class="tag tag-year">${escHtml(article.year)}</span>` : '';
@@ -564,7 +690,7 @@ function renderCard(article, idx) {
   ${clusterLabel}
   <div class="article-title">${titleHtml}</div>
   <div class="article-meta">${escHtml(article.authors || '')}${article.authors && article.journal ? ' · ' : ''}${escHtml(article.journal || '')}</div>
-  <div class="article-tags">${sourceTag}${yearTag}${citTag}</div>
+  <div class="article-tags">${relTag}${sourceTag}${yearTag}${citTag}</div>
   <div class="article-actions">
     <button class="${readClass}" onclick="toggleRead('${safeId}')">${readLabel}</button>
     <button class="${saveClass}" onclick="toggleSave('${safeId}')">${saveLabel}</button>
@@ -592,6 +718,12 @@ function selectCluster(id) {
 
 function selectFilter(id) {
   currentFilter = id;
+  renderFilterBar();
+  renderArticles();
+}
+
+function selectSort(id) {
+  currentSort = id;
   renderFilterBar();
   renderArticles();
 }
@@ -808,4 +940,5 @@ window.closeLibraryModal   = closeLibraryModal;
 window.saveLibraryList     = saveLibraryList;
 window.clearLibraryList    = clearLibraryList;
 window.previewLibraryParse = previewLibraryParse;
+window.selectSort      = selectSort;
 window.runSearch       = runSearch;

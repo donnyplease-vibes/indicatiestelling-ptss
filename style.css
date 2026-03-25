@@ -173,18 +173,58 @@ html, body {
   margin: 0 auto;
 }
 
-/* Filter chips */
+/* Filter + sort bar */
 #filter-bar {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 7px;
   margin-bottom: 14px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 6px;
   align-items: center;
-  flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 2px;
 }
-#filter-bar::-webkit-scrollbar { display: none; }
+.filter-row::-webkit-scrollbar { display: none; }
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sort-row::-webkit-scrollbar { display: none; }
+
+.sort-label {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sort-btn {
+  background: none;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.sort-btn:hover { color: var(--text); border-color: var(--border); }
+.sort-btn.active {
+  color: var(--accent);
+  border-color: rgba(240,136,62,0.35);
+  background: rgba(240,136,62,0.08);
+  font-weight: 600;
+}
 
 .filter-btn {
   background: var(--surface);
@@ -211,6 +251,7 @@ html, body {
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  padding-right: 2px;
 }
 
 /* ─── ARTICLE CARDS ───────────────────────────────── */
@@ -306,6 +347,12 @@ html, body {
 .tag-openalex       { background: rgba(240,136,62,0.10); color: #d4a76a; }
 .tag-citations      { background: rgba(63,185,80,0.10);  color: #56d364; }
 .tag-year           { background: var(--surface2); color: var(--text-muted); }
+
+/* Relevance tags */
+.tag-rel          { font-weight: 700; letter-spacing: 0.3px; }
+.tag-rel-high     { background: rgba(63,185,80,0.12);  color: #3fb950; }
+.tag-rel-medium   { background: rgba(47,129,247,0.12); color: #79b8ff; }
+.tag-rel-low      { background: rgba(255,255,255,0.05); color: var(--text-muted); }
 
 /* Action buttons */
 .article-actions {
