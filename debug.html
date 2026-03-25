@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTSS Monitor — Diagnose</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #cdd9e5; padding: 16px; font-size: 13px; }
+    h1 { font-size: 16px; color: #58a6ff; margin-bottom: 16px; }
+    h2 { font-size: 13px; color: #f0883e; margin: 16px 0 6px; }
+    pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px; white-space: pre-wrap; word-break: break-all; margin: 0 0 8px; }
+    .ok  { color: #3fb950; }
+    .err { color: #f85149; }
+    .warn{ color: #d29922; }
+    button { background: #2f81f7; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; margin: 12px 0; display: block; width: 100%; }
+    textarea { width: 100%; height: 220px; background: #161b22; color: #cdd9e5; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; margin-top: 8px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+<h1>🔬 PTSS Monitor — Diagnoserapport</h1>
+<div id="out"></div>
+<button onclick="copyReport()">📋 Kopieer rapport</button>
+<textarea id="copy-area" readonly></textarea>
+
+<script>
+const lines = [];
+function log(label, value, cls) {
+  lines.push({ label, value, cls });
+  render();
+}
+function render() {
+  document.getElementById('out').innerHTML = lines.map(l =>
+    `<h2>${l.label}</h2><pre class="${l.cls||''}">${l.value}</pre>`
+  ).join('');
+}
+
+// ---- 1. Browser / platform ----
+log('User-Agent', navigator.userAgent);
+log('Platform', `${navigator.platform} | language: ${navigator.language} | online: ${navigator.onLine}`);
+log('Schermgrootte', `${screen.width}×${screen.height} (devicePixelRatio: ${devicePixelRatio})`);
+
+// ---- 2. Service Worker ----
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    if (!regs.length) {
+      log('Service Worker', 'Geen geregistreerde service workers', 'warn');
+    } else {
+      regs.forEach((r, i) => {
+        const sw = r.active || r.installing || r.waiting;
+        log(`Service Worker [${i}]`, `scope: ${r.scope}\nstate: ${sw ? sw.state : 'geen'}\nscriptURL: ${sw ? sw.scriptURL : 'onbekend'}`);
+      });
+    }
+  }).catch(e => log('Service Worker fout', e.message, 'err'));
+} else {
+  log('Service Worker', 'Niet ondersteund in deze browser', 'err');
+}
+
+// ---- 3. Cache storage ----
+if ('caches' in window) {
+  caches.keys().then(keys => {
+    log('Cache Storage sleutels', keys.length ? keys.join('\n') : '(leeg)', keys.length ? 'ok' : 'warn');
+  }).catch(e => log('Cache fout', e.message, 'err'));
+} else {
+  log('Cache Storage', 'Niet beschikbaar', 'warn');
+}
+
+// ---- 4. localStorage ----
+try {
+  const lsKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    const v = localStorage.getItem(k);
+    const size = new Blob([v]).size;
+    let preview = '';
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) preview = `Array(${parsed.length})`;
+      else if (typeof parsed === 'object' && parsed !== null) preview = `Object(${Object.keys(parsed).length} keys)`;
+      else preview = String(parsed).substring(0, 60);
+    } catch { preview = String(v).substring(0, 60); }
+    lsKeys.push(`${k}: ${preview} [${size} bytes]`);
+  }
+  log('LocalStorage', lsKeys.length ? lsKeys.join('\n') : '(leeg)', lsKeys.length ? 'ok' : 'warn');
+} catch(e) {
+  log('LocalStorage fout', e.message, 'err');
+}
+
+// ---- 5. Try loading app.js-afhankelijke data ----
+try {
+  const articles = JSON.parse(localStorage.getItem('ptss_articles') || '[]');
+  const read     = JSON.parse(localStorage.getItem('ptss_read') || '[]');
+  const excluded = JSON.parse(localStorage.getItem('ptss_excluded') || '[]');
+  const scores   = JSON.parse(localStorage.getItem('ptss_llm_scores') || '{}');
+  const manual   = JSON.parse(localStorage.getItem('ptss_manual_scores') || '{}');
+  const extra    = JSON.parse(localStorage.getItem('ptss_extra_queries') || '{}');
+  const libCache = JSON.parse(localStorage.getItem('ptss_library_cache') || '{}');
+  const lastSearch = localStorage.getItem('ptss_last_search') || null;
+  const memo     = localStorage.getItem('ptss_llm_memo') || '';
+  const apiKey   = localStorage.getItem('ptss_api_key') || '';
+  log('App data', [
+    `artikelen:      ${articles.length}`,
+    `gelezen:        ${read.length}`,
+    `uitgesloten:    ${excluded.length}`,
+    `llm scores:     ${Object.keys(scores).length}`,
+    `handm. scores:  ${Object.keys(manual).length}`,
+    `extra queries:  ${Object.values(extra).flat().length}`,
+    `libr. cache:    ${Object.keys(libCache).length} DOIs verrijkt`,
+    `laatste zoek:   ${lastSearch || 'nooit'}`,
+    `leermemo:       ${memo ? memo.length + ' tekens' : 'leeg'}`,
+    `api key:        ${apiKey ? 'ingesteld (' + apiKey.length + ' tekens)' : 'niet ingesteld'}`,
+  ].join('\n'), 'ok');
+} catch(e) {
+  log('App data fout', e.message, 'err');
+}
+
+// ---- 6. Fetch app.js header (versiecheck) ----
+fetch('./app.js', { method: 'HEAD', cache: 'no-store' })
+  .then(r => {
+    const etag = r.headers.get('etag') || 'n/b';
+    const modified = r.headers.get('last-modified') || 'n/b';
+    const cc = r.headers.get('cache-control') || 'n/b';
+    log('app.js (server)', `status: ${r.status}\netag: ${etag}\nlast-modified: ${modified}\ncache-control: ${cc}`, r.ok ? 'ok' : 'err');
+  }).catch(e => log('app.js fetch fout', e.message, 'err'));
+
+// ---- 7. Probeer app.js te parsen (syntax check) ----
+fetch('./app.js', { cache: 'no-store' })
+  .then(r => r.text())
+  .then(src => {
+    const swLine = src.match(/ptss-monitor-v\d+/)?.[0] || 'niet gevonden';
+    const lines_count = src.split('\n').length;
+    try {
+      new Function(src);
+      log('app.js syntaxcheck', `OK — ${lines_count} regels, SW cache: ${swLine}`, 'ok');
+    } catch(e) {
+      log('app.js SYNTAXFOUT', `${e.message}\nSW cache: ${swLine}\nRegels: ${lines_count}`, 'err');
+    }
+  }).catch(e => log('app.js laden mislukt', e.message, 'err'));
+
+// ---- Copy ----
+function copyReport() {
+  const text = lines.map(l => `=== ${l.label} ===\n${l.value}`).join('\n\n');
+  const ta = document.getElementById('copy-area');
+  ta.value = text;
+  ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  ta.scrollIntoView();
+}
+</script>
+</body>
+</html>
