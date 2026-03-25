@@ -195,8 +195,12 @@ const CLUSTER_PRIORITY = {
 };
 
 function scoreArticle(article) {
+  const id = articleId(article);
+  // Use LLM score if available (0–10 → 0–100)
+  if (llmScores[id]) return Math.round(llmScores[id].score * 10);
+
   const titleText   = (article.title   || '').toLowerCase();
-  const abstractText = (abstractCache[articleId(article)] || article.abstract || '').toLowerCase();
+  const abstractText = (abstractCache[id] || article.abstract || '').toLowerCase();
 
   let score = 0;
 
@@ -247,24 +251,32 @@ function relevanceTier(score) {
 
 // ---- State ----
 let allArticles = [];
-let currentSort = 'relevance';     // 'relevance' | 'date' | 'citations'
-let hideMinimalRelevance = false;  // verberg artikelen met score < 15 (minimale relevantie)
+let currentSort = 'relevance';
+let hideMinimalRelevance = false;
 let readSet = new Set();
 let savedSet = new Set();
 let excludedSet = new Set();
 let abstractCache = {};
+let llmScores    = {};   // articleId → { score:0-10, reasoning, evaluatedAt }
+let llmMemo      = '';   // lerend evaluatiedocument
+let libraryCache = {};   // doi → { title, abstract, year, authors }
+let isEvaluating = false;
 let currentCluster = 'all';
 let currentFilter = 'all';
 let isSearching = false;
 let deferredInstall = null;
 
 // ---- LocalStorage keys ----
-const LS_LAST_SEARCH = 'ptss_last_search';
-const LS_ARTICLES    = 'ptss_articles';
-const LS_READ        = 'ptss_read';
-const LS_SAVED       = 'ptss_saved';
-const LS_EXCLUDED    = 'ptss_excluded';
-const LS_ABSTRACTS   = 'ptss_abstracts';
+const LS_LAST_SEARCH    = 'ptss_last_search';
+const LS_ARTICLES       = 'ptss_articles';
+const LS_READ           = 'ptss_read';
+const LS_SAVED          = 'ptss_saved';
+const LS_EXCLUDED       = 'ptss_excluded';
+const LS_ABSTRACTS      = 'ptss_abstracts';
+const LS_API_KEY        = 'ptss_api_key';
+const LS_LLM_SCORES     = 'ptss_llm_scores';
+const LS_LLM_MEMO       = 'ptss_llm_memo';
+const LS_LIBRARY_CACHE  = 'ptss_library_cache';
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
@@ -274,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFilterBar();
   renderArticles();
   updateStatusBar();
+  updateApiKeyUI();
   setupInstallPrompt();
   checkAutoSearch();
 });
@@ -288,10 +301,13 @@ function loadState() {
   try {
     const raw = localStorage.getItem(LS_ARTICLES);
     allArticles = raw ? JSON.parse(raw) : [];
-    readSet   = new Set(JSON.parse(localStorage.getItem(LS_READ)   || '[]'));
-    savedSet  = new Set(JSON.parse(localStorage.getItem(LS_SAVED)  || '[]'));
-    excludedSet = new Set(JSON.parse(localStorage.getItem(LS_EXCLUDED) || '[]'));
-    abstractCache = JSON.parse(localStorage.getItem(LS_ABSTRACTS) || '{}');
+    readSet      = new Set(JSON.parse(localStorage.getItem(LS_READ)      || '[]'));
+    savedSet     = new Set(JSON.parse(localStorage.getItem(LS_SAVED)     || '[]'));
+    excludedSet  = new Set(JSON.parse(localStorage.getItem(LS_EXCLUDED)  || '[]'));
+    abstractCache = JSON.parse(localStorage.getItem(LS_ABSTRACTS)  || '{}');
+    llmScores    = JSON.parse(localStorage.getItem(LS_LLM_SCORES)  || '{}');
+    llmMemo      = localStorage.getItem(LS_LLM_MEMO) || '';
+    libraryCache = JSON.parse(localStorage.getItem(LS_LIBRARY_CACHE) || '{}');
   } catch(e) {
     allArticles = [];
   }
@@ -304,9 +320,18 @@ function saveState() {
     localStorage.setItem(LS_SAVED,     JSON.stringify([...savedSet]));
     localStorage.setItem(LS_EXCLUDED,  JSON.stringify([...excludedSet]));
     localStorage.setItem(LS_ABSTRACTS, JSON.stringify(abstractCache));
+    saveLLMState();
   } catch(e) {
     console.warn('localStorage full?', e);
   }
+}
+
+function saveLLMState() {
+  try {
+    localStorage.setItem(LS_LLM_SCORES,    JSON.stringify(llmScores));
+    localStorage.setItem(LS_LLM_MEMO,      llmMemo);
+    localStorage.setItem(LS_LIBRARY_CACHE, JSON.stringify(libraryCache));
+  } catch(e) {}
 }
 
 function getLastSearch() { return localStorage.getItem(LS_LAST_SEARCH) || null; }
@@ -614,6 +639,12 @@ async function runSearch() {
     : 'Geen nieuwe artikelen gevonden.';
   updateStatus('active', msg);
   showToast(msg);
+
+  // Auto-evaluate with AI if API key is set and there are new articles to evaluate
+  if (getApiKey() && visible.length > 0) {
+    await sleep(800);
+    runAIEvaluation();
+  }
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -765,8 +796,14 @@ function renderCard(article, idx) {
   const score = scoreArticle(article);
   const tier  = relevanceTier(score);
   const tierLabels = { high: '★★★ Hoog', medium: '★★ Relevant', low: '★ Laag', minimal: '' };
-  const relTag = tier !== 'minimal'
-    ? `<span class="tag tag-rel tag-rel-${tier}">${tierLabels[tier]}</span>`
+  const llm = llmScores[id];
+  const relTag = llm
+    ? `<span class="tag tag-rel tag-llm">🤖 ${llm.score}/10</span>`
+    : tier !== 'minimal'
+      ? `<span class="tag tag-rel tag-rel-${tier}">${tierLabels[tier]}</span>`
+      : '';
+  const llmReasoning = llm
+    ? `<div class="llm-reasoning">${escHtml(llm.reasoning)}</div>`
     : '';
 
   const sourceKey = article.source.toLowerCase().replace(/\s/g, '');
@@ -800,6 +837,7 @@ function renderCard(article, idx) {
   <div class="article-title">${titleHtml}</div>
   <div class="article-meta">${escHtml(article.authors || '')}${article.authors && article.journal ? ' · ' : ''}${escHtml(article.journal || '')}</div>
   <div class="article-tags">${relTag}${sourceTag}${yearTag}${citTag}</div>
+  ${llmReasoning}
   <div class="article-actions">
     <button class="${readClass}" onclick="toggleRead('${safeId}')">${readLabel}</button>
     <button class="${saveClass}" onclick="toggleSave('${safeId}')">${saveLabel}</button>
@@ -874,9 +912,218 @@ function removeExclude(id) {
   updateStatusBar();
 }
 
+// ---- API key management ----
+function getApiKey() { return localStorage.getItem(LS_API_KEY) || ''; }
+function saveApiKeyFromInput() {
+  const input = document.getElementById('api-key-input');
+  const val = (input?.value || '').trim();
+  if (!val || val.startsWith('•')) { showToast('Voer een geldige API-sleutel in.'); return; }
+  localStorage.setItem(LS_API_KEY, val);
+  if (input) input.value = '•'.repeat(Math.min(val.length, 20));
+  updateApiKeyUI();
+  showToast('API-sleutel opgeslagen');
+}
+function removeApiKey() {
+  localStorage.removeItem(LS_API_KEY);
+  const input = document.getElementById('api-key-input');
+  if (input) input.value = '';
+  updateApiKeyUI();
+  showToast('API-sleutel verwijderd');
+}
+function updateApiKeyUI() {
+  const key = getApiKey();
+  const status = document.getElementById('api-key-status');
+  const aiBtn  = document.getElementById('ai-eval-btn');
+  if (status) {
+    status.textContent = key ? '✓ API-sleutel opgeslagen' : 'Geen API-sleutel ingesteld';
+    status.className = 'api-key-status ' + (key ? 'status-ok' : 'status-none');
+  }
+  if (aiBtn) aiBtn.style.display = key ? '' : 'none';
+}
+
+// ---- Library enrichment ----
+async function enrichLibrary() {
+  const dois = [...excludedSet]
+    .filter(id => id.startsWith('doi:'))
+    .map(id => id.slice(4))
+    .filter(doi => !libraryCache[doi]);
+
+  if (!dois.length) { showToast('Alle bibliotheek-items al verrijkt of geen DOIs.'); return; }
+
+  document.getElementById('progress-overlay').classList.add('visible');
+  let enriched = 0;
+  const BATCH = 5;
+
+  for (let i = 0; i < dois.length; i += BATCH) {
+    const batch = dois.slice(i, i + BATCH);
+    updateProgress(`Bibliotheek verrijken: ${Math.min(i + BATCH, dois.length)}/${dois.length}...`);
+    await Promise.all(batch.map(async doi => {
+      // Semantic Scholar
+      try {
+        const r = await fetch(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=title,abstract,year,authors`);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.title) {
+            libraryCache[doi] = { title: d.title, abstract: d.abstract || '', year: String(d.year || ''), authors: (d.authors||[]).slice(0,3).map(a=>a.name).join(', ') };
+            enriched++; return;
+          }
+        }
+      } catch(e) {}
+      // OpenAlex fallback
+      try {
+        const r = await fetch(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(doi)}?select=title,abstract_inverted_index,publication_year,authorships&mailto=ptss-monitor@example.com`);
+        if (r.ok) {
+          const d = await r.json();
+          const abstract = reconstructOpenAlexAbstract(d.abstract_inverted_index);
+          if (d.title) {
+            libraryCache[doi] = { title: d.title, abstract: abstract || '', year: String(d.publication_year || ''), authors: (d.authorships||[]).slice(0,3).map(a=>a.author?.display_name||'').filter(Boolean).join(', ') };
+            enriched++;
+          }
+        }
+      } catch(e) {}
+    }));
+    saveLLMState();
+    await sleep(300);
+  }
+
+  document.getElementById('progress-overlay').classList.remove('visible');
+  updateLibraryStats();
+  showToast(`Verrijking klaar: ${enriched}/${dois.length} DOIs gevonden`);
+}
+
+// ---- AI evaluation ----
+async function runAIEvaluation() {
+  if (isEvaluating) return;
+  const apiKey = getApiKey();
+  if (!apiKey) { showToast('Voer eerst een Anthropic API-sleutel in via Bibliotheek.'); return; }
+
+  const toEvaluate = allArticles.filter(a => !isExcluded(a) && !llmScores[articleId(a)]);
+  if (!toEvaluate.length) { showToast('Alle zichtbare artikelen zijn al geëvalueerd.'); return; }
+
+  isEvaluating = true;
+  document.getElementById('progress-overlay').classList.add('visible');
+
+  const libraryExamples = Object.values(libraryCache)
+    .filter(v => v.abstract && v.abstract.length > 50)
+    .slice(0, 6)
+    .map(v => `• ${v.title} (${v.year}): ${v.abstract.substring(0, 250)}...`)
+    .join('\n');
+
+  const BATCH_SIZE = 8;
+  let done = 0;
+  for (let i = 0; i < toEvaluate.length; i += BATCH_SIZE) {
+    const batch = toEvaluate.slice(i, i + BATCH_SIZE);
+    updateProgress(`AI-evaluatie: ${done}/${toEvaluate.length} artikelen...`);
+    await evaluateBatch(batch, apiKey, libraryExamples);
+    done += batch.length;
+    saveLLMState();
+    renderArticles();
+    await sleep(600);
+  }
+
+  if (done > 0) {
+    updateProgress('Leermemo bijwerken...');
+    await updateLearningMemo(apiKey, toEvaluate.slice(0, 20));
+  }
+
+  isEvaluating = false;
+  document.getElementById('progress-overlay').classList.remove('visible');
+  updateLibraryStats();
+  renderArticles();
+  showToast(`${done} artikel${done===1?'':'en} geëvalueerd door AI`);
+}
+
+async function evaluateBatch(articles, apiKey, libraryExamples) {
+  const articleTexts = articles.map((a, i) => {
+    const id = articleId(a);
+    const abs = abstractCache[id] || a.abstract || '';
+    return `[${i+1}] TITEL: ${a.title}\nABSTRACT: ${abs ? abs.substring(0, 400) : '(niet beschikbaar)'}`;
+  }).join('\n\n---\n\n');
+
+  const memoSection  = llmMemo ? `\n\nLEERMEMO (vorige sessies):\n${llmMemo}` : '';
+  const libSection   = libraryExamples ? `\n\nVOORBEELDEN UIT BIBLIOTHEEK GEBRUIKER:\n${libraryExamples}` : '';
+
+  const systemPrompt =
+    `Je bent een wetenschappelijk assistent die artikelen beoordeelt op relevantie voor promotieonderzoek.
+
+ONDERZOEKSVRAAG: Welke patiënt-, behandelaar-, interventie- en systeemfactoren beïnvloeden de indicatiestelling voor traumagerichte behandeling (TGT) bij volwassenen met PTSS? Specifiek: waarom kiezen clinici wel of niet voor TGT, en welke TGT selecteren ze? (Fraikin, 2026 — kwalitatief, Nederland)
+
+THEMATISCH RELEVANT: behandelselectie, indicatiestelling, moderatoren TGT-effectiviteit, barrières/facilitatoren TGT, comorbiditeiten als contra-indicaties, patiëntpreferenties, clinicus-attitudes, richtlijn-praktijk kloof, EMDR/PE/CPT/ImRS.${memoSection}${libSection}`;
+
+  const userPrompt =
+    `Beoordeel de volgende ${articles.length} artikelen (0–10 relevantiescore).\n\n${articleTexts}\n\nAntwoord uitsluitend als JSON-array:\n[{"index":1,"score":7,"reasoning":"Eén zin waarom relevant of niet"},...]\n\nScores: 0–3 = niet relevant, 4–6 = matig, 7–9 = relevant, 10 = kernrelevant. Wees kritisch.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+    if (!resp.ok) { console.warn('Claude API:', await resp.text()); return; }
+    const data  = await resp.json();
+    const text  = data.content?.[0]?.text || '';
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return;
+    const results = JSON.parse(match[0]);
+    const now = new Date().toISOString();
+    for (const r of results) {
+      const idx = r.index - 1;
+      if (idx >= 0 && idx < articles.length) {
+        llmScores[articleId(articles[idx])] = {
+          score:      Math.max(0, Math.min(10, Number(r.score) || 0)),
+          reasoning:  r.reasoning || '',
+          evaluatedAt: now
+        };
+      }
+    }
+  } catch(e) { console.warn('evaluateBatch error:', e); }
+}
+
+async function updateLearningMemo(apiKey, evaluatedArticles) {
+  const high = evaluatedArticles.filter(a => (llmScores[articleId(a)]?.score || 0) >= 7);
+  if (!high.length) return;
+  const examples = high.slice(0, 10).map(a => {
+    const s = llmScores[articleId(a)];
+    return `Score ${s.score}/10: ${a.title} — ${s.reasoning}`;
+  }).join('\n');
+  const prevSection = llmMemo ? `\n\nHUIDIG MEMO:\n${llmMemo}` : '';
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: `Schrijf een beknopt leermemo (max 150 woorden) over welke artikelen hoog scoorden en welke inhoudelijke patronen je ziet. Dit memo wordt hergebruikt bij volgende evaluatiesessies.\n\nHOOG GESCOORDE ARTIKELEN:\n${examples}${prevSection}\n\nFocus op inhoudelijke patronen, niet op procedure.` }]
+      })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const newMemo = data.content?.[0]?.text || '';
+      if (newMemo) { llmMemo = newMemo; saveLLMState(); }
+    }
+  } catch(e) {}
+}
+
 // ---- Library exclusion modal ----
 function openLibraryModal() {
   document.getElementById('library-modal').classList.add('open');
+  updateApiKeyUI();
   updateLibraryStats();
 }
 
@@ -885,10 +1132,16 @@ function closeLibraryModal() {
 }
 
 function updateLibraryStats() {
-  const count = excludedSet.size;
-  const matched = allArticles.filter(a => isExcluded(a)).length;
-  document.getElementById('library-stats').textContent =
-    `${count} items in bibliotheek · ${matched} artikel${matched === 1 ? '' : 'en'} uitgesloten uit resultaten`;
+  const count    = excludedSet.size;
+  const matched  = allArticles.filter(a => isExcluded(a)).length;
+  const enriched = Object.keys(libraryCache).length;
+  const memoEl   = document.getElementById('llm-memo-display');
+  if (memoEl) memoEl.textContent = llmMemo || '';
+  if (memoEl) memoEl.style.display = llmMemo ? '' : 'none';
+  document.getElementById('library-stats').innerHTML =
+    `${count} items in bibliotheek · ${matched} artikel${matched === 1 ? '' : 'en'} uitgesloten` +
+    (enriched ? ` · ${enriched} verrijkt` : '') +
+    (llmMemo ? ` · <span class="memo-indicator">📝 leermemo actief</span>` : '');
 }
 
 function parseLibraryText(text) {
@@ -990,19 +1243,18 @@ function clearLibraryList() {
 }
 
 function resetAllArticles() {
-  // Directe localStorage-reset zonder hulpfuncties die kunnen falen
-  try { localStorage.removeItem(LS_ARTICLES);   } catch(e) {}
-  try { localStorage.removeItem(LS_READ);        } catch(e) {}
-  try { localStorage.removeItem(LS_ABSTRACTS);   } catch(e) {}
-  try { localStorage.removeItem(LS_LAST_SEARCH); } catch(e) {}
-  // Reset in-memory state
+  try { localStorage.removeItem(LS_ARTICLES);    } catch(e) {}
+  try { localStorage.removeItem(LS_READ);         } catch(e) {}
+  try { localStorage.removeItem(LS_ABSTRACTS);    } catch(e) {}
+  try { localStorage.removeItem(LS_LAST_SEARCH);  } catch(e) {}
+  try { localStorage.removeItem(LS_LLM_SCORES);   } catch(e) {}
+  // Keep libraryCache and llmMemo — they are cross-session knowledge
   allArticles   = [];
   readSet       = new Set();
   abstractCache = {};
-  // Sluit modal direct via DOM
+  llmScores     = {};
   const modal = document.getElementById('library-modal');
   if (modal) modal.classList.remove('open');
-  // Herrender
   renderTabs();
   renderFilterBar();
   renderArticles();
@@ -1079,4 +1331,8 @@ window.clearLibraryList    = clearLibraryList;
 window.previewLibraryParse = previewLibraryParse;
 window.selectSort             = selectSort;
 window.toggleRelevanceFilter  = toggleRelevanceFilter;
-window.runSearch       = runSearch;
+window.runSearch          = runSearch;
+window.saveApiKeyFromInput = saveApiKeyFromInput;
+window.removeApiKey        = removeApiKey;
+window.enrichLibrary       = enrichLibrary;
+window.runAIEvaluation     = runAIEvaluation;

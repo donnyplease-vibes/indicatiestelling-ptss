@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ptss-monitor-v6';
+const CACHE_NAME = 'ptss-monitor-v7';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -39,7 +39,7 @@ self.addEventListener('fetch', event => {
   }
 
   // Network-first for API calls (with cache fallback for offline)
-  if (url.hostname.includes('ncbi') || url.hostname.includes('semanticscholar') || url.hostname.includes('openalex')) {
+  if (url.hostname.includes('ncbi') || url.hostname.includes('semanticscholar') || url.hostname.includes('openalex') || url.hostname.includes('anthropic')) {
     event.respondWith(
       fetch(event.request)
         .then(response => {

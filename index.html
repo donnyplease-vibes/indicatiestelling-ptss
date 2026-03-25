@@ -27,6 +27,7 @@
         <small>PubMed · Semantic Scholar · OpenAlex</small>
       </h1>
       <button id="library-btn" onclick="openLibraryModal()">Bibliotheek</button>
+      <button id="ai-eval-btn" onclick="runAIEvaluation()" style="display:none">🤖 AI-analyse</button>
       <button id="search-btn" onclick="runSearch()">Zoeken</button>
     </div>
     <label id="full-search-label">
@@ -101,6 +102,26 @@ Voorbeelden:
         <button class="btn-primary" onclick="saveLibraryList()">Inladen &amp; uitsluiten</button>
         <button class="btn-secondary" onclick="closeLibraryModal()">Sluiten</button>
         <button class="btn-danger" onclick="clearLibraryList()">Bibliotheek wissen</button>
+      </div>
+      <hr class="modal-divider">
+      <div class="modal-api-section">
+        <strong>AI-evaluatie (optioneel)</strong>
+        <p>
+          Voer een <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic API-sleutel</a> in om artikelen automatisch te laten beoordelen door Claude Haiku.
+          De sleutel wordt alleen lokaal opgeslagen in je browser en nooit naar een server gestuurd.<br>
+          Na het zoeken worden nieuwe artikelen automatisch geëvalueerd als er een sleutel is ingesteld.
+        </p>
+        <div class="api-key-row">
+          <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off">
+          <button class="btn-primary" onclick="saveApiKeyFromInput()">Opslaan</button>
+          <button class="btn-secondary" onclick="removeApiKey()">Verwijderen</button>
+        </div>
+        <div id="api-key-status" class="api-key-status status-none">Geen API-sleutel ingesteld</div>
+        <div class="enrich-row">
+          <button class="btn-secondary" onclick="enrichLibrary()">Bibliotheek verrijken</button>
+          <span class="enrich-hint">Haalt abstracts op voor je bibliotheek-DOIs (beter AI-context)</span>
+        </div>
+        <div id="llm-memo-display" class="llm-memo-box" style="display:none"></div>
       </div>
       <hr class="modal-divider">
       <div class="modal-reset-section">
