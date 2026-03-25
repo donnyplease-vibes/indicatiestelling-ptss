@@ -990,12 +990,19 @@ function clearLibraryList() {
 }
 
 function resetAllArticles() {
-  allArticles = [];
-  readSet.clear();
+  // Directe localStorage-reset zonder hulpfuncties die kunnen falen
+  try { localStorage.removeItem(LS_ARTICLES);   } catch(e) {}
+  try { localStorage.removeItem(LS_READ);        } catch(e) {}
+  try { localStorage.removeItem(LS_ABSTRACTS);   } catch(e) {}
+  try { localStorage.removeItem(LS_LAST_SEARCH); } catch(e) {}
+  // Reset in-memory state
+  allArticles   = [];
+  readSet       = new Set();
   abstractCache = {};
-  localStorage.removeItem(LS_LAST_SEARCH);
-  saveState();
-  closeLibraryModal();
+  // Sluit modal direct via DOM
+  const modal = document.getElementById('library-modal');
+  if (modal) modal.classList.remove('open');
+  // Herrender
   renderTabs();
   renderFilterBar();
   renderArticles();
