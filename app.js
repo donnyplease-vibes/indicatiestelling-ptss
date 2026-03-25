@@ -990,6 +990,21 @@ function clearLibraryList() {
   showToast('Bibliotheek geleegd.');
 }
 
+function resetAllArticles() {
+  if (!confirm('Alle gevonden artikelen wissen? Je uitsluitingslijst en opgeslagen artikelen blijven bewaard. Daarna kun je opnieuw zoeken met de verbeterde queries.')) return;
+  allArticles = [];
+  readSet.clear();
+  abstractCache = {};
+  localStorage.removeItem(LS_LAST_SEARCH);
+  saveState();
+  closeLibraryModal();
+  renderTabs();
+  renderFilterBar();
+  renderArticles();
+  updateStatusBar();
+  showToast('Reset voltooid — druk op Zoeken om opnieuw te beginnen');
+}
+
 // ---- Status bar ----
 function updateStatusBar() {
   const last = getLastSearch();
@@ -1051,6 +1066,7 @@ window.toggleSave      = toggleSave;
 window.toggleAbstract  = toggleAbstract;
 window.addExclude      = addExclude;
 window.removeExclude   = removeExclude;
+window.resetAllArticles    = resetAllArticles;
 window.openLibraryModal    = openLibraryModal;
 window.closeLibraryModal   = closeLibraryModal;
 window.saveLibraryList     = saveLibraryList;

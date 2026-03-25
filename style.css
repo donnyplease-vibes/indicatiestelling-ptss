@@ -651,6 +651,26 @@ html, body {
 .preview-ok   { color: var(--green); font-weight: 600; }
 .preview-warn { color: var(--yellow); }
 
+.modal-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.modal-reset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.modal-reset-section strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.modal-reset-section p {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;
