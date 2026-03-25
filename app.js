@@ -790,6 +790,7 @@ function renderArticles() {
 
 function renderCard(article, idx) {
   const id = articleId(article);
+  const safeId = escAttr(id);
   const isRead = readSet.has(id);
   const isSaved = savedSet.has(id);
   const excluded = isExcluded(article);
@@ -843,8 +844,6 @@ function renderCard(article, idx) {
   const saveLabel  = isSaved ? 'Opgeslagen ★' : 'Opslaan';
   const readClass  = isRead  ? 'action-btn active-read' : 'action-btn';
   const saveClass  = isSaved ? 'action-btn active-save' : 'action-btn';
-
-  const safeId = escAttr(id);
 
   const excludeBtn = excluded
     ? `<button class="action-btn active-excluded" onclick="removeExclude('${safeId}')">Uitgesloten ✕</button>`
