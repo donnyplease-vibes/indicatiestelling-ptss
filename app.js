@@ -287,15 +287,21 @@ const LS_LIBRARY_CACHE  = 'ptss_library_cache';
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
-  registerSW();
-  loadState();
-  renderTabs();
-  renderFilterBar();
-  renderArticles();
-  updateStatusBar();
-  updateApiKeyUI();
-  setupInstallPrompt();
-  checkAutoSearch();
+  try {
+    registerSW();
+    loadState();
+    renderTabs();
+    renderFilterBar();
+    renderArticles();
+    updateStatusBar();
+    updateApiKeyUI();
+    setupInstallPrompt();
+    checkAutoSearch();
+  } catch(e) {
+    console.error('Init crash:', e);
+    const msg = document.getElementById('status-msg');
+    if (msg) msg.textContent = 'Fout bij laden: ' + e.message;
+  }
 });
 
 function registerSW() {
