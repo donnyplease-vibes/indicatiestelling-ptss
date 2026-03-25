@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1a569b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PTSS Monitor">
+  <meta name="description" content="Maandelijkse monitor voor wetenschappelijke publicaties over PTSS-behandelindicatie">
+
+  <title>PTSS Onderzoeksmonitor</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <div id="header">
+    <div id="header-top">
+      <h1>
+        PTSS Onderzoeksmonitor
+        <small>PubMed · Semantic Scholar · OpenAlex</small>
+      </h1>
+      <button id="search-btn" onclick="runSearch()">Zoeken</button>
+    </div>
+
+    <div id="status-bar">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-msg">Laden...</span>
+      <span style="margin-left:auto;" id="last-search"></span>
+    </div>
+
+    <!-- Cluster tabs -->
+    <div id="tab-bar"></div>
+  </div>
+
+  <!-- Main content -->
+  <div id="main">
+    <div id="filter-bar"></div>
+    <div id="articles-container">
+      <div class="state-card">
+        <div class="spinner"></div>
+        <h3>Laden...</h3>
+        <p>Even geduld terwijl de app opstart.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress overlay -->
+  <div id="progress-overlay">
+    <span id="progress-text">Zoeken...</span>
+  </div>
+
+  <!-- Bottom info bar -->
+  <div id="bottom-info">
+    <div class="stat">
+      <span id="stat-total">0</span>
+      <span>artikelen</span>
+    </div>
+    <div class="stat">
+      <span id="stat-new">0</span>
+      <span>nieuw</span>
+    </div>
+    <button id="install-btn">Installeren</button>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
