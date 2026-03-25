@@ -1,12 +1,12 @@
-const CACHE_NAME = 'ptss-monitor-v1';
+const CACHE_NAME = 'ptss-monitor-v2';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -27,16 +27,18 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+  const path = url.pathname;
 
   // Cache-first for static assets
-  if (STATIC_ASSETS.some(a => url.pathname === a || url.pathname.endsWith(a))) {
+  if (path.endsWith('.html') || path.endsWith('.css') || path.endsWith('.js') ||
+      path.endsWith('.png') || path.endsWith('.json') || path === '/') {
     event.respondWith(
       caches.match(event.request).then(cached => cached || fetch(event.request))
     );
     return;
   }
 
-  // Network-first for API calls (with cache fallback)
+  // Network-first for API calls (with cache fallback for offline)
   if (url.hostname.includes('ncbi') || url.hostname.includes('semanticscholar') || url.hostname.includes('openalex')) {
     event.respondWith(
       fetch(event.request)
@@ -50,7 +52,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Default: network with cache fallback
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );

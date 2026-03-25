@@ -12,10 +12,10 @@
 
   <title>PTSS Onderzoeksmonitor</title>
 
-  <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="/icon-192.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -45,9 +45,9 @@
     <div id="filter-bar"></div>
     <div id="articles-container">
       <div class="state-card">
-        <div class="spinner"></div>
-        <h3>Laden...</h3>
-        <p>Even geduld terwijl de app opstart.</p>
+        <span class="state-icon">🔬</span>
+        <h3>Klaar om te zoeken</h3>
+        <p>Druk op <strong>Zoeken</strong> om PubMed, Semantic Scholar en OpenAlex te doorzoeken op nieuwe publicaties over PTSS-behandelindicatie.</p>
       </div>
     </div>
   </div>
@@ -84,6 +84,7 @@
       <div id="library-stats">Geen bibliotheek-items geladen.</div>
       <textarea
         id="library-textarea"
+        oninput="previewLibraryParse(this.value)"
         placeholder="Plak hier je BibTeX export, RIS export, of DOIs (één per regel)...
 
 Voorbeelden:
@@ -91,6 +92,7 @@ Voorbeelden:
   DO  - 10.1037/tra0000000
   https://doi.org/10.1080/20008198.2021.1912789
   10.1002/jts.22765"></textarea>
+      <div id="library-preview"></div>
       <div class="modal-actions">
         <button class="btn-primary" onclick="saveLibraryList()">Inladen &amp; uitsluiten</button>
         <button class="btn-secondary" onclick="closeLibraryModal()">Sluiten</button>
@@ -102,6 +104,6 @@ Voorbeelden:
   <!-- Toast -->
   <div id="toast"></div>
 
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function registerSW() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+    navigator.serviceWorker.register('./sw.js').catch(console.warn);
   }
 }
 
@@ -497,6 +497,7 @@ function renderArticles() {
   if (allArticles.length === 0) {
     container.innerHTML = `
       <div class="state-card">
+        <span class="state-icon">🔬</span>
         <h3>Nog geen resultaten</h3>
         <p>Druk op <strong>Zoeken</strong> om de databases te doorzoeken op publicaties over PTSS-behandelindicatie.</p>
       </div>`;
@@ -506,6 +507,7 @@ function renderArticles() {
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="state-card">
+        <span class="state-icon">🔍</span>
         <h3>Geen artikelen gevonden</h3>
         <p>Er zijn geen artikelen die aan dit filter voldoen.</p>
       </div>`;
@@ -677,6 +679,30 @@ function parseLibraryText(text) {
   return ids;
 }
 
+function previewLibraryParse(text) {
+  const preview = document.getElementById('library-preview');
+  if (!preview) return;
+  if (!text.trim()) { preview.innerHTML = ''; return; }
+  const parsed = parseLibraryText(text);
+  const dois   = [...parsed].filter(id => id.startsWith('doi:')).length;
+  const titles = [...parsed].filter(id => id.startsWith('title:')).length;
+  if (parsed.size === 0) {
+    preview.innerHTML = `<span class="preview-warn">Geen DOIs of titels herkend — controleer het formaat.</span>`;
+  } else {
+    const parts = [];
+    if (dois)   parts.push(`${dois} DOI${dois   === 1 ? '' : 's'}`);
+    if (titles) parts.push(`${titles} titel${titles === 1 ? '' : 's'}`);
+    const matched = allArticles.filter(a => {
+      const tmp = new Set([...excludedSet, ...parsed]);
+      const origExcluded = excludedSet;
+      // temporarily check against parsed set
+      if (a.doi) return parsed.has('doi:' + normalizeDoi(a.doi));
+      return parsed.has('title:' + normalizeTitle(a.title));
+    }).length;
+    preview.innerHTML = `<span class="preview-ok">✓ Herkend: ${parts.join(' + ')}${matched ? ` · ${matched} artikel${matched===1?'':'en'} in huidige resultaten` : ''}</span>`;
+  }
+}
+
 function saveLibraryList() {
   const text = document.getElementById('library-textarea').value;
   const parsed = parseLibraryText(text);
@@ -694,8 +720,14 @@ function saveLibraryList() {
   updateStatusBar();
 
   const matched = allArticles.filter(a => isExcluded(a)).length;
-  showToast(`${parsed.size} referenties ingeladen · ${matched} artikelen uitgesloten`);
+  const dois   = [...parsed].filter(id => id.startsWith('doi:')).length;
+  const titles = [...parsed].filter(id => id.startsWith('title:')).length;
+  const parts  = [];
+  if (dois)   parts.push(`${dois} DOI${dois===1?'':'s'}`);
+  if (titles) parts.push(`${titles} titel${titles===1?'':'s'}`);
+  showToast(`Ingeladen: ${parts.join(' + ')} · ${matched} artikel${matched===1?'':'en'} uitgesloten`);
   document.getElementById('library-textarea').value = '';
+  document.getElementById('library-preview').innerHTML = '';
 }
 
 function clearLibraryList() {
@@ -771,8 +803,9 @@ window.toggleSave      = toggleSave;
 window.toggleAbstract  = toggleAbstract;
 window.addExclude      = addExclude;
 window.removeExclude   = removeExclude;
-window.openLibraryModal  = openLibraryModal;
-window.closeLibraryModal = closeLibraryModal;
-window.saveLibraryList   = saveLibraryList;
-window.clearLibraryList  = clearLibraryList;
+window.openLibraryModal    = openLibraryModal;
+window.closeLibraryModal   = closeLibraryModal;
+window.saveLibraryList     = saveLibraryList;
+window.clearLibraryList    = clearLibraryList;
+window.previewLibraryParse = previewLibraryParse;
 window.runSearch       = runSearch;
