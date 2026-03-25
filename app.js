@@ -1059,7 +1059,8 @@ async function runAIEvaluation() {
   document.getElementById('progress-overlay').classList.remove('visible');
   updateLibraryStats();
   renderArticles();
-  showToast(`${done} artikel${done===1?'':'en} geëvalueerd door AI`);
+  const _artikelSuffix = done === 1 ? '' : 'en';
+  showToast(`${done} artikel${_artikelSuffix} geëvalueerd door AI`);
 }
 
 async function evaluateBatch(articles, apiKey, libraryExamples) {
