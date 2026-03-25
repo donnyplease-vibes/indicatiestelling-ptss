@@ -979,7 +979,6 @@ function saveLibraryList() {
 }
 
 function clearLibraryList() {
-  if (!confirm(`Weet je zeker dat je alle ${excludedSet.size} bibliotheek-items wilt verwijderen?`)) return;
   excludedSet.clear();
   saveState();
   updateLibraryStats();
@@ -991,7 +990,6 @@ function clearLibraryList() {
 }
 
 function resetAllArticles() {
-  if (!confirm('Alle gevonden artikelen wissen? Je uitsluitingslijst en opgeslagen artikelen blijven bewaard. Daarna kun je opnieuw zoeken met de verbeterde queries.')) return;
   allArticles = [];
   readSet.clear();
   abstractCache = {};

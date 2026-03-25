@@ -106,7 +106,12 @@ Voorbeelden:
       <div class="modal-reset-section">
         <strong>Zoekresultaten resetten</strong>
         <p>Wis alle gevonden artikelen en begin opnieuw met de verbeterde zoekopdrachten.</p>
-        <button class="btn-danger" onclick="resetAllArticles()">Alle resultaten wissen &amp; opnieuw beginnen</button>
+        <div id="reset-confirm" style="display:none;" class="reset-confirm-box">
+          <span>Weet je het zeker?</span>
+          <button class="btn-danger" onclick="resetAllArticles()">Ja, wis alles</button>
+          <button class="btn-secondary" onclick="document.getElementById('reset-confirm').style.display='none'">Annuleren</button>
+        </div>
+        <button class="btn-danger" id="reset-trigger-btn" onclick="document.getElementById('reset-confirm').style.display='flex'">Alle resultaten wissen &amp; opnieuw beginnen</button>
       </div>
     </div>
   </div>
