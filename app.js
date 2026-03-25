@@ -2,15 +2,18 @@
 // PTSS Onderzoeksmonitor — app.js
 // ============================================================
 
+// ============================================================
+// CLUSTERS
+// ============================================================
 const CLUSTERS = [
   {
     id: 'differential',
     label: 'Differentiële effectiviteit',
     shortLabel: 'Diff. effect.',
     queries: [
-      'PTSD treatment moderators',
-      'differential effectiveness trauma-focused therapy',
-      'PTSD personalized treatment'
+      'PTSD treatment moderators differential effectiveness',
+      'differential effectiveness trauma-focused therapy EMDR CPT',
+      'PTSD personalized treatment predictor response'
     ]
   },
   {
@@ -18,9 +21,9 @@ const CLUSTERS = [
     label: 'Comorbiditeit & contra-indicaties',
     shortLabel: 'Comorbiditeit',
     queries: [
-      'PTSD comorbidity treatment outcome',
-      'complex PTSD psychotherapy',
-      'PTSD dissociation BPD suicidality treatment'
+      'PTSD comorbidity treatment outcome psychotherapy',
+      'complex PTSD dissociation treatment psychotherapy',
+      'PTSD psychosis suicidality personality disorder trauma-focused treatment'
     ]
   },
   {
@@ -28,9 +31,9 @@ const CLUSTERS = [
     label: 'Indicatiestelling & klinische besluitvorming',
     shortLabel: 'Indicatiestelling',
     queries: [
-      'PTSD clinical decision making treatment selection',
-      'clinician barriers trauma-focused therapy',
-      'PTSD treatment preferences'
+      'PTSD clinical decision making treatment selection trauma-focused',
+      'clinician barriers facilitators trauma-focused therapy implementation',
+      'PTSD treatment preferences beliefs clinician therapist'
     ]
   },
   {
@@ -38,17 +41,17 @@ const CLUSTERS = [
     label: 'Acceptability & adverse effects',
     shortLabel: 'Acceptability',
     queries: [
-      'PTSD treatment dropout acceptability',
-      'trauma-focused therapy adverse effects deterioration'
+      'PTSD treatment dropout acceptability patient',
+      'trauma-focused therapy adverse effects deterioration contraindication'
     ]
   },
   {
     id: 'epidemiology',
-    label: 'Epidemiologie',
-    shortLabel: 'Epidemiologie',
+    label: 'Behandelkloof & hulpzoekgedrag',
+    shortLabel: 'Behandelkloof',
     queries: [
-      'PTSD prevalence incidence Europe',
-      'trauma exposure undertreatment help-seeking'
+      'PTSD treatment gap undertreatment barriers access',
+      'PTSD help-seeking treatment utilization guideline adherence'
     ]
   },
   {
@@ -56,57 +59,85 @@ const CLUSTERS = [
     label: 'Richtlijn-praktijk gap',
     shortLabel: 'Richtlijn gap',
     queries: [
-      'PTSD guideline implementation treatment gap',
-      'evidence-practice gap trauma-focused therapy'
+      'PTSD guideline implementation evidence-practice gap clinician',
+      'evidence-practice gap trauma-focused therapy science practice'
     ]
   }
 ];
 
 // ============================================================
 // RELEVANCE SCORING
-// Tiers based on the core research question:
-//   "Welke PTSS-patiënten zijn geïndiceerd voor welke behandeling,
-//    en hoe nemen clinici die beslissing?"
+// Based on research question: "According to clinicians, what
+// patient, clinician, intervention and system factors influence
+// whether they indicate a TFT and which TFT they select for
+// adult PTSD patients?" (Fraikin, 2026 — Crossing the gap)
 // ============================================================
 const RELEVANCE_PROFILE = {
-  // Tier 1 — kern van de onderzoeksvraag (elk trefwoord: +12 pts in titel, +7 in abstract)
+  // Tier 1 — kern van de onderzoeksvraag (+12 titel / +7 abstract per treffer)
   tier1: [
-    'treatment selection', 'treatment matching', 'treatment indication',
-    'personalized treatment', 'precision treatment', 'tailored treatment',
-    'individualized treatment', 'treatment moderator', 'moderators of treatment',
-    'differential effectiveness', 'differential efficacy', 'differential response',
-    'who benefits', 'clinical decision', 'decision making', 'treatment algorithm',
-    'treatment recommendation', 'stepped care', 'treatment predictor',
-    'predictor of treatment', 'treatment response predictor',
-    'indicatiestelling', 'treatment suitability',
+    // Behandelselectie & indicatiestelling
+    'treatment selection', 'treatment indication', 'treatment matching',
+    'treatment choice', 'treatment decision', 'clinical decision',
+    'clinical reasoning', 'decision making', 'indicatiestelling',
+    'who benefits', 'treatment algorithm', 'treatment recommendation',
+    'personalized treatment', 'tailored treatment', 'precision treatment',
+    'individualized treatment', 'treatment suitability',
+    // Differentiële effectiviteit — centrale empirische vraag
+    'differential effectiveness', 'differential efficacy', 'differential effect',
+    'differential response', 'treatment moderator', 'moderator of treatment',
+    'moderators of treatment outcome', 'predictor of treatment response',
+    'treatment predictor', 'baseline predictor',
+    // Barrières & facilitatoren voor TFT — directe focus interviews
+    'clinician barrier', 'therapist barrier', 'barrier to treatment',
+    'facilitator', 'science-practice gap', 'evidence-practice gap',
+    'practice gap', 'treatment gap', 'guideline adherence',
+    'implementation barrier', 'clinician belief', 'therapist belief',
+    'clinician attitude', 'therapist attitude', 'treatment reluctance',
+    'resistance to treatment', 'provider attitude', 'provider belief',
   ],
-  // Tier 2 — sterk gerelateerd (elk trefwoord: +6 pts in titel, +3 in abstract)
+  // Tier 2 — sterk gerelateerd (+6 titel / +3 abstract)
   tier2: [
-    'dropout', 'attrition', 'treatment acceptability', 'adverse effect',
-    'deterioration', 'negative effect', 'treatment failure',
-    'comorbidity', 'complex ptsd', 'complex post', 'dissociation',
-    'borderline', 'suicidality', 'substance use',
-    'implementation', 'evidence-practice', 'guideline adherence',
-    'clinician barrier', 'therapist attitude', 'treatment preference',
-    'patient preference', 'shared decision', 'treatment engagement',
+    // Specifieke TFTs uit het voorstel
+    'emdr', 'eye movement desensitization', 'prolonged exposure',
+    'cognitive processing therapy', 'imagery rescripting', 'imrs',
+    'tf-cbt', 'trauma-focused cbt', 'narrative exposure therapy',
+    'brief eclectic', 'bepp', 'writing therapy',
+    // Adverse effects & contra-indicaties — kernthema interviews
+    'contraindication', 'contra-indication', 'adverse effect',
+    'deterioration', 'negative effect', 'symptom exacerbation',
+    'dropout', 'attrition', 'treatment acceptability', 'treatment refusal',
+    'treatment completion', 'premature termination',
+    // Specifieke comorbiditeiten als mogelijke contra-indicaties
+    'complex ptsd', 'complex post-traumatic', 'dissociation', 'dissociative',
+    'personality disorder', 'borderline personality',
+    'psychotic disorder', 'psychosis', 'schizophrenia',
+    'substance use disorder', 'suicidal', 'suicidality',
+    'intellectual disability', 'autism spectrum', 'autistic',
+    'traumatic brain injury', 'acquired brain injury',
+    'major depressive disorder', 'comorbid depression',
+    // Clinicus- en systeemfactoren
+    'therapist training', 'clinician training', 'supervision',
+    'patient preference', 'treatment preference', 'shared decision',
+    'caseload', 'system barrier', 'organizational barrier',
   ],
-  // Tier 3 — context (elk trefwoord: +2 pts in titel, +1 in abstract)
+  // Tier 3 — bredere context (+2 titel / +1 abstract)
   tier3: [
-    'ptsd', 'posttraumatic', 'post-traumatic', 'trauma-focused',
-    'emdr', 'prolonged exposure', 'cognitive processing', 'cpt',
-    'trauma therapy', 'psychotherapy', 'treatment outcome',
-    'randomized', 'randomised', 'rct', 'meta-analysis', 'systematic review',
+    'ptsd', 'posttraumatic stress', 'post-traumatic stress',
+    'trauma therapy', 'trauma treatment', 'trauma-focused',
+    'psychotherapy', 'comorbidity', 'treatment outcome',
+    'evidence-based treatment', 'meta-analysis', 'systematic review',
+    'randomized controlled trial', 'implementation', 'clinical guideline',
   ],
 };
 
-// Cluster priority for the research question (0-20)
+// Clusterprioriteit voor deze onderzoeksvraag (0-20)
 const CLUSTER_PRIORITY = {
-  clinical:      20,
-  differential:  17,
-  comorbidity:   14,
-  acceptability: 11,
-  guideline:      9,
-  epidemiology:   5,
+  clinical:      20,   // Indicatiestelling — kern
+  differential:  18,   // Differentiële effectiviteit — kern empirische vraag
+  comorbidity:   15,   // Comorbiditeit als contra-indicatie — centraal in interviews
+  acceptability: 12,   // Adverse effects & acceptability — centraal in interviews
+  guideline:     10,   // Richtlijn-praktijk gap — direct relevant
+  epidemiology:   4,   // Behandelkloof — contextfactor, minst direct relevant
 };
 
 function scoreArticle(article) {
@@ -156,13 +187,14 @@ function relevanceTier(score) {
 
 // ---- State ----
 let allArticles = [];
-let currentSort = 'relevance'; // 'relevance' | 'date' | 'citations'
+let currentSort = 'relevance';     // 'relevance' | 'date' | 'citations'
+let hideMinimalRelevance = false;  // verberg artikelen met score < 15 (minimale relevantie)
 let readSet = new Set();
 let savedSet = new Set();
-let excludedSet = new Set();   // normalized DOIs/titles of library articles
-let abstractCache = {};        // articleId -> abstract text (or null = unavailable)
+let excludedSet = new Set();
+let abstractCache = {};
 let currentCluster = 'all';
-let currentFilter = 'all';    // all | new | saved | unread | excluded
+let currentFilter = 'all';
 let isSearching = false;
 let deferredInstall = null;
 
@@ -234,9 +266,12 @@ function normalizeTitle(t) {
 
 function normalizeDoi(doi) {
   return (doi || '').toLowerCase()
-    .replace(/^https?:\/\/doi\.org\//i, '')
-    .replace(/^doi:/i, '')
-    .trim();
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')  // URL form
+    .replace(/^doi:\s*/i, '')                         // doi: prefix
+    .replace(/\s+/g, '')                              // internal spaces
+    .replace(/[.,;]+$/, '')                           // trailing punctuation
+    .replace(/\/v\d+$/, '');                          // version suffix (/v1, /v2)
 }
 
 function articleId(article) {
@@ -458,8 +493,10 @@ async function runSearch() {
   document.getElementById('progress-overlay').classList.add('visible');
   updateStatus('searching', 'Bezig met zoeken...');
 
-  const fromDate = getLastSearch();
+  const fullSearch = document.getElementById('full-search-toggle')?.checked;
+  const fromDate = fullSearch ? null : getLastSearch();
   const today = new Date().toISOString().split('T')[0];
+  if (fullSearch) updateProgress('Volledige zoekactie (geen datumfilter)…');
   let newArticles = [];
   const total = CLUSTERS.reduce((s, c) => s + c.queries.length, 0);
   let done = 0;
@@ -559,6 +596,7 @@ function renderFilterBar() {
     { id: 'citations', label: 'Citaties' },
   ];
   const countLabel = `<span class="count-label" id="article-count"></span>`;
+  const relevanceToggleClass = hideMinimalRelevance ? 'sort-btn active' : 'sort-btn';
   bar.innerHTML =
     `<div class="filter-row">` +
     filters.map(f =>
@@ -571,6 +609,10 @@ function renderFilterBar() {
     sorts.map(s =>
       `<button class="sort-btn${currentSort === s.id ? ' active' : ''}" onclick="selectSort('${s.id}')">${s.label}</button>`
     ).join('') +
+    `<span class="sort-divider">|</span>` +
+    `<button class="${relevanceToggleClass}" onclick="toggleRelevanceFilter()">` +
+    (hideMinimalRelevance ? '★ Hoog &amp; relevant' : '★ Alle relevantie') +
+    `</button>` +
     `</div>`;
 }
 
@@ -582,11 +624,12 @@ function getFilteredArticles() {
   if (currentFilter === 'excluded') {
     articles = articles.filter(a => isExcluded(a));
   } else {
-    // All non-excluded views hide excluded articles
     articles = articles.filter(a => !isExcluded(a));
     if (currentFilter === 'new')    articles = articles.filter(a => a.isNew);
     else if (currentFilter === 'saved')  articles = articles.filter(a => savedSet.has(articleId(a)));
     else if (currentFilter === 'unread') articles = articles.filter(a => !readSet.has(articleId(a)));
+    // Optioneel: verberg artikelen met score < drempel
+    if (hideMinimalRelevance) articles = articles.filter(a => scoreArticle(a) >= 15);
   }
 
   return articles.sort((a, b) => {
@@ -726,6 +769,13 @@ function selectSort(id) {
   currentSort = id;
   renderFilterBar();
   renderArticles();
+}
+
+function toggleRelevanceFilter() {
+  hideMinimalRelevance = !hideMinimalRelevance;
+  renderFilterBar();
+  renderArticles();
+  if (hideMinimalRelevance) showToast('Artikelen met minimale relevantie verborgen');
 }
 
 function toggleRead(id) {
@@ -940,5 +990,6 @@ window.closeLibraryModal   = closeLibraryModal;
 window.saveLibraryList     = saveLibraryList;
 window.clearLibraryList    = clearLibraryList;
 window.previewLibraryParse = previewLibraryParse;
-window.selectSort      = selectSort;
+window.selectSort             = selectSort;
+window.toggleRelevanceFilter  = toggleRelevanceFilter;
 window.runSearch       = runSearch;
