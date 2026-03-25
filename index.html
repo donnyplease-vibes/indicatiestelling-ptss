@@ -26,6 +26,7 @@
         PTSS Onderzoeksmonitor
         <small>PubMed · Semantic Scholar · OpenAlex</small>
       </h1>
+      <button id="library-btn" onclick="openLibraryModal()">Bibliotheek</button>
       <button id="search-btn" onclick="runSearch()">Zoeken</button>
     </div>
 
@@ -67,6 +68,35 @@
       <span>nieuw</span>
     </div>
     <button id="install-btn">Installeren</button>
+  </div>
+
+  <!-- Library exclusion modal -->
+  <div id="library-modal" onclick="if(event.target===this)closeLibraryModal()">
+    <div class="modal-sheet">
+      <h2>Bibliotheek uitsluiten</h2>
+      <p>
+        Plak hier een export uit je referentiemanager. De app herkent automatisch:
+        <strong>BibTeX</strong> (.bib), <strong>RIS</strong> (.ris), of
+        een lijst van losse <strong>DOIs</strong> (één per regel of als links).<br><br>
+        Exporteer vanuit Zotero via <em>Bestand → Exporteer bibliotheek → BibTeX</em>, of selecteer
+        je hele bibliotheek en gebruik <em>Ctrl+Shift+C</em> om DOIs te kopiëren.
+      </p>
+      <div id="library-stats">Geen bibliotheek-items geladen.</div>
+      <textarea
+        id="library-textarea"
+        placeholder="Plak hier je BibTeX export, RIS export, of DOIs (één per regel)...
+
+Voorbeelden:
+  @article{key, doi = {10.1016/j.janxdis.2020.01.001}, ...}
+  DO  - 10.1037/tra0000000
+  https://doi.org/10.1080/20008198.2021.1912789
+  10.1002/jts.22765"></textarea>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveLibraryList()">Inladen &amp; uitsluiten</button>
+        <button class="btn-secondary" onclick="closeLibraryModal()">Sluiten</button>
+        <button class="btn-danger" onclick="clearLibraryList()">Alles wissen</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
