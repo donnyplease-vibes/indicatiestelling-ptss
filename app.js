@@ -196,7 +196,9 @@ const CLUSTER_PRIORITY = {
 
 function scoreArticle(article) {
   const id = articleId(article);
-  // Use LLM score if available (0–10 → 0–100)
+  // Manual score takes highest priority (1–5 stars → 20–100)
+  if (manualScores[id]) return manualScores[id].score * 20;
+  // LLM score second priority (0–10 → 0–100)
   if (llmScores[id]) return Math.round(llmScores[id].score * 10);
 
   const titleText   = (article.title   || '').toLowerCase();
@@ -257,9 +259,12 @@ let readSet = new Set();
 let savedSet = new Set();
 let excludedSet = new Set();
 let abstractCache = {};
-let llmScores    = {};   // articleId → { score:0-10, reasoning, evaluatedAt }
-let llmMemo      = '';   // lerend evaluatiedocument
-let libraryCache = {};   // doi → { title, abstract, year, authors }
+let llmScores      = {};  // articleId → { score:0-10, reasoning, evaluatedAt }
+let manualScores   = {};  // articleId → { score:1-5, ratedAt }
+let llmMemo        = '';  // lerend evaluatiedocument
+let libraryCache   = {};  // doi → { title, abstract, year, authors }
+let extraQueries   = {};  // cluster.id → [{general, pubmed}]
+let pendingProposal = null; // tijdelijk voorstel voor query-optimalisatie
 let isEvaluating = false;
 let currentCluster = 'all';
 let currentFilter = 'all';
@@ -275,6 +280,8 @@ const LS_EXCLUDED       = 'ptss_excluded';
 const LS_ABSTRACTS      = 'ptss_abstracts';
 const LS_API_KEY        = 'ptss_api_key';
 const LS_LLM_SCORES     = 'ptss_llm_scores';
+const LS_MANUAL_SCORES  = 'ptss_manual_scores';
+const LS_EXTRA_QUERIES  = 'ptss_extra_queries';
 const LS_LLM_MEMO       = 'ptss_llm_memo';
 const LS_LIBRARY_CACHE  = 'ptss_library_cache';
 
@@ -305,9 +312,11 @@ function loadState() {
     savedSet     = new Set(JSON.parse(localStorage.getItem(LS_SAVED)     || '[]'));
     excludedSet  = new Set(JSON.parse(localStorage.getItem(LS_EXCLUDED)  || '[]'));
     abstractCache = JSON.parse(localStorage.getItem(LS_ABSTRACTS)  || '{}');
-    llmScores    = JSON.parse(localStorage.getItem(LS_LLM_SCORES)  || '{}');
+    llmScores    = JSON.parse(localStorage.getItem(LS_LLM_SCORES)   || '{}');
+    manualScores = JSON.parse(localStorage.getItem(LS_MANUAL_SCORES) || '{}');
     llmMemo      = localStorage.getItem(LS_LLM_MEMO) || '';
     libraryCache = JSON.parse(localStorage.getItem(LS_LIBRARY_CACHE) || '{}');
+    extraQueries = JSON.parse(localStorage.getItem(LS_EXTRA_QUERIES) || '{}');
   } catch(e) {
     allArticles = [];
   }
@@ -329,8 +338,10 @@ function saveState() {
 function saveLLMState() {
   try {
     localStorage.setItem(LS_LLM_SCORES,    JSON.stringify(llmScores));
+    localStorage.setItem(LS_MANUAL_SCORES, JSON.stringify(manualScores));
     localStorage.setItem(LS_LLM_MEMO,      llmMemo);
     localStorage.setItem(LS_LIBRARY_CACHE, JSON.stringify(libraryCache));
+    localStorage.setItem(LS_EXTRA_QUERIES, JSON.stringify(extraQueries));
   } catch(e) {}
 }
 
@@ -588,11 +599,12 @@ async function runSearch() {
   const today = new Date().toISOString().split('T')[0];
   if (fullSearch) updateProgress('Volledige zoekactie (geen datumfilter)…');
   let newArticles = [];
-  const total = CLUSTERS.reduce((s, c) => s + c.queries.length, 0);
+  const total = CLUSTERS.reduce((s, c) => s + c.queries.length + (extraQueries[c.id]?.length || 0), 0);
   let done = 0;
 
   for (const cluster of CLUSTERS) {
-    for (const query of cluster.queries) {
+    const allQueries = [...cluster.queries, ...(extraQueries[cluster.id] || [])];
+    for (const query of allQueries) {
       const queryLabel = typeof query === 'object' ? query.general : query;
       updateProgress(`${cluster.shortLabel}: "${queryLabel.substring(0, 35)}…"`);
       const [pubmed, semantic, openalex] = await Promise.all([
@@ -796,15 +808,26 @@ function renderCard(article, idx) {
   const score = scoreArticle(article);
   const tier  = relevanceTier(score);
   const tierLabels = { high: '★★★ Hoog', medium: '★★ Relevant', low: '★ Laag', minimal: '' };
-  const llm = llmScores[id];
-  const relTag = llm
-    ? `<span class="tag tag-rel tag-llm">🤖 ${llm.score}/10</span>`
-    : tier !== 'minimal'
-      ? `<span class="tag tag-rel tag-rel-${tier}">${tierLabels[tier]}</span>`
-      : '';
-  const llmReasoning = llm
+  const llm  = llmScores[id];
+  const man  = manualScores[id];
+  const relTag = man
+    ? `<span class="tag tag-rel tag-manual">${'★'.repeat(man.score)}${'☆'.repeat(5 - man.score)} Mijn score</span>`
+    : llm
+      ? `<span class="tag tag-rel tag-llm">🤖 ${llm.score}/10</span>`
+      : tier !== 'minimal'
+        ? `<span class="tag tag-rel tag-rel-${tier}">${tierLabels[tier]}</span>`
+        : '';
+  const llmReasoning = llm && !man
     ? `<div class="llm-reasoning">${escHtml(llm.reasoning)}</div>`
     : '';
+
+  // Star rating widget (1–5 stars)
+  const manStars = man ? man.score : 0;
+  const starBtns = [1,2,3,4,5].map(s =>
+    `<button class="star-btn${manStars >= s ? ' filled' : ''}" onclick="setManualScore('${safeId}',${s})" title="${s} ster${s===1?'':'ren'}">${manStars >= s ? '★' : '☆'}</button>`
+  ).join('');
+  const clearStar = man ? `<button class="star-clear" onclick="clearManualScore('${safeId}')" title="Beoordeling wissen">×</button>` : '';
+  const starWidget = `<span class="star-rating" title="Jouw beoordeling">${starBtns}${clearStar}</span>`;
 
   const sourceKey = article.source.toLowerCase().replace(/\s/g, '');
   const sourceTag = `<span class="tag tag-${sourceKey}">${escHtml(article.source)}</span>`;
@@ -843,6 +866,7 @@ function renderCard(article, idx) {
     <button class="${saveClass}" onclick="toggleSave('${safeId}')">${saveLabel}</button>
     <button class="action-btn abstract-btn" onclick="toggleAbstract(${idx})">${absLabel}</button>
     ${excludeBtn}
+    ${starWidget}
   </div>
   <div class="abstract-body"></div>
 </div>`;
@@ -1090,12 +1114,27 @@ THEMATISCH RELEVANT: behandelselectie, indicatiestelling, moderatoren TGT-effect
 }
 
 async function updateLearningMemo(apiKey, evaluatedArticles) {
-  const high = evaluatedArticles.filter(a => (llmScores[articleId(a)]?.score || 0) >= 7);
+  const high = evaluatedArticles.filter(a => {
+    const id = articleId(a);
+    return (manualScores[id]?.score || 0) >= 4 || (llmScores[id]?.score || 0) >= 7;
+  });
   if (!high.length) return;
-  const examples = high.slice(0, 10).map(a => {
-    const s = llmScores[articleId(a)];
-    return `Score ${s.score}/10: ${a.title} — ${s.reasoning}`;
+  const examples = high.slice(0, 12).map(a => {
+    const id = articleId(a);
+    const man = manualScores[id];
+    const llm = llmScores[id];
+    const scoreStr = man ? `${man.score}★ (gebruiker)` : `${llm.score}/10 (AI)`;
+    return `${scoreStr}: ${a.title}${llm?.reasoning ? ' — ' + llm.reasoning : ''}`;
   }).join('\n');
+  // Also include highly manually-scored articles not in evaluatedArticles
+  const extraManual = Object.entries(manualScores)
+    .filter(([, ms]) => ms.score >= 4)
+    .map(([id]) => allArticles.find(a => articleId(a) === id))
+    .filter(a => a && !high.includes(a))
+    .slice(0, 5)
+    .map(a => `${manualScores[articleId(a)].score}★ (gebruiker): ${a.title}`)
+    .join('\n');
+  const feedbackSection = extraManual ? `\n\nEXTRA HANDMATIG BEOORDEELD:\n${extraManual}` : '';
   const prevSection = llmMemo ? `\n\nHUIDIG MEMO:\n${llmMemo}` : '';
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1109,7 +1148,7 @@ async function updateLearningMemo(apiKey, evaluatedArticles) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
-        messages: [{ role: 'user', content: `Schrijf een beknopt leermemo (max 150 woorden) over welke artikelen hoog scoorden en welke inhoudelijke patronen je ziet. Dit memo wordt hergebruikt bij volgende evaluatiesessies.\n\nHOOG GESCOORDE ARTIKELEN:\n${examples}${prevSection}\n\nFocus op inhoudelijke patronen, niet op procedure.` }]
+        messages: [{ role: 'user', content: `Schrijf een beknopt leermemo (max 150 woorden) over welke artikelen hoog scoorden en welke inhoudelijke patronen je ziet. Geef extra gewicht aan handmatige beoordelingen (★) boven AI-scores. Dit memo wordt hergebruikt bij volgende evaluatiesessies.\n\nHOOG GESCOORDE ARTIKELEN:\n${examples}${feedbackSection}${prevSection}\n\nFocus op inhoudelijke patronen, niet op procedure.` }]
       })
     });
     if (resp.ok) {
@@ -1118,6 +1157,153 @@ async function updateLearningMemo(apiKey, evaluatedArticles) {
       if (newMemo) { llmMemo = newMemo; saveLLMState(); }
     }
   } catch(e) {}
+}
+
+// ---- Manual scoring ----
+function setManualScore(id, stars) {
+  manualScores[id] = { score: stars, ratedAt: new Date().toISOString() };
+  saveLLMState();
+  renderArticles();
+}
+
+function clearManualScore(id) {
+  delete manualScores[id];
+  saveLLMState();
+  renderArticles();
+}
+
+// ---- Query optimisation ----
+async function optimizeSearchQueries() {
+  const apiKey = getApiKey();
+  if (!apiKey) { showToast('Voer eerst een API-sleutel in.'); return; }
+
+  // Build feedback from manual + LLM scores
+  const feedbackItems = allArticles.map(a => {
+    const id = articleId(a);
+    const man = manualScores[id];
+    const llm = llmScores[id];
+    if (!man && !llm) return null;
+    return { title: a.title, cluster: a.cluster, manualScore: man?.score || null, llmScore: llm?.score || null, reasoning: llm?.reasoning || '' };
+  }).filter(Boolean);
+
+  if (feedbackItems.length < 3) {
+    showToast('Score eerst meer artikelen (minimaal 3) voor optimalisatie.');
+    return;
+  }
+
+  const high = feedbackItems.filter(a => (a.manualScore != null ? a.manualScore >= 4 : false) || (a.llmScore != null ? a.llmScore >= 7 : false));
+  const low  = feedbackItems.filter(a => (a.manualScore != null ? a.manualScore <= 2 : false) || (a.llmScore != null ? a.llmScore <= 3  : false));
+
+  const highLines = high.slice(0, 8).map(a => `✓ ${a.manualScore ? a.manualScore + '★' : 'AI:' + a.llmScore} [${a.cluster}] ${a.title}`).join('\n');
+  const lowLines  = low.slice(0, 5).map(a => `✗ ${a.manualScore ? a.manualScore + '★' : 'AI:' + a.llmScore} [${a.cluster}] ${a.title}`).join('\n');
+
+  const existingExtra = Object.entries(extraQueries).flatMap(([cid, qs]) => qs.map(q => `[${cid}] ${q.general}`)).join('\n');
+
+  document.getElementById('progress-overlay').classList.add('visible');
+  updateProgress('Zoekopdrachten optimaliseren...');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{ role: 'user', content:
+          `Je bent expert in academisch literatuurzoeken. Analyseer de volgende beoordeelde artikelen en stel 2–4 aanvullende zoektermen voor.
+
+ONDERZOEKSVRAAG: Indicatiestelling voor traumagerichte behandeling (TGT) bij PTSS — welke factoren beïnvloeden klinische besluitvorming? (kwalitatief, Nederland)
+
+CLUSTERS: differential, comorbidity, clinical, acceptability, epidemiology, guideline
+
+HOOG BEOORDEELD (relevant):
+${highLines || '(geen)'}
+
+LAAG BEOORDEELD (niet relevant):
+${lowLines || '(geen)'}
+
+${existingExtra ? `AL TOEGEVOEGDE EXTRA QUERIES:\n${existingExtra}\n\n` : ''}Stel max 4 NIEUWE aanvullende queries voor (nog niet in de lijst). Geef je antwoord als JSON:
+{
+  "analysis": "Korte analyse van patronen (2–3 zinnen)",
+  "extra_queries": [
+    {"cluster": "clinical", "general": "PTSD indication shared decision making clinician", "rationale": "Reden"}
+  ]
+}` }]
+      })
+    });
+
+    document.getElementById('progress-overlay').classList.remove('visible');
+
+    if (!resp.ok) { showToast('API-fout bij optimalisatie.'); return; }
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) { showToast('Kon voorstel niet parsen.'); return; }
+
+    pendingProposal = JSON.parse(match[0]);
+    renderQueryProposal();
+
+  } catch(e) {
+    document.getElementById('progress-overlay').classList.remove('visible');
+    console.warn('optimizeSearchQueries error:', e);
+    showToast('Fout: ' + e.message);
+  }
+}
+
+function renderQueryProposal() {
+  const el = document.getElementById('query-proposal');
+  if (!el || !pendingProposal) return;
+
+  const items = (pendingProposal.extra_queries || []).map(q =>
+    `<div class="proposal-item">
+      <span class="proposal-cluster">${escHtml(q.cluster)}</span>
+      <span class="proposal-query">${escHtml(q.general)}</span>
+      <div class="proposal-rationale">${escHtml(q.rationale)}</div>
+    </div>`
+  ).join('');
+
+  el.innerHTML =
+    `<div class="proposal-analysis">${escHtml(pendingProposal.analysis || '')}</div>` +
+    `<div class="proposal-list">${items}</div>` +
+    `<div class="proposal-actions">` +
+    `<button class="btn-primary" onclick="applyPendingProposal()">Toepassen</button>` +
+    `<button class="btn-secondary" onclick="discardPendingProposal()">Annuleren</button>` +
+    `</div>`;
+  el.style.display = '';
+}
+
+function applyPendingProposal() {
+  if (!pendingProposal) return;
+  let added = 0;
+  for (const q of (pendingProposal.extra_queries || [])) {
+    if (!extraQueries[q.cluster]) extraQueries[q.cluster] = [];
+    const exists = extraQueries[q.cluster].some(eq => eq.general === q.general);
+    if (!exists) { extraQueries[q.cluster].push({ general: q.general, pubmed: null }); added++; }
+  }
+  saveLLMState();
+  pendingProposal = null;
+  const el = document.getElementById('query-proposal');
+  if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+  updateLibraryStats();
+  showToast(`${added} extra zoekopdracht${added === 1 ? '' : 'en'} toegevoegd — actief bij volgende zoekactie`);
+}
+
+function discardPendingProposal() {
+  pendingProposal = null;
+  const el = document.getElementById('query-proposal');
+  if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+}
+
+function clearExtraQueries() {
+  extraQueries = {};
+  saveLLMState();
+  updateLibraryStats();
+  showToast('Extra zoekopdrachten verwijderd.');
 }
 
 // ---- Library exclusion modal ----
@@ -1138,9 +1324,11 @@ function updateLibraryStats() {
   const memoEl   = document.getElementById('llm-memo-display');
   if (memoEl) memoEl.textContent = llmMemo || '';
   if (memoEl) memoEl.style.display = llmMemo ? '' : 'none';
+  const extraCount = Object.values(extraQueries).reduce((s, qs) => s + qs.length, 0);
   document.getElementById('library-stats').innerHTML =
     `${count} items in bibliotheek · ${matched} artikel${matched === 1 ? '' : 'en'} uitgesloten` +
     (enriched ? ` · ${enriched} verrijkt` : '') +
+    (extraCount ? ` · <span class="memo-indicator">🔍 ${extraCount} extra quer${extraCount === 1 ? 'y' : 'ies'}</span>` : '') +
     (llmMemo ? ` · <span class="memo-indicator">📝 leermemo actief</span>` : '');
 }
 
@@ -1247,12 +1435,14 @@ function resetAllArticles() {
   try { localStorage.removeItem(LS_READ);         } catch(e) {}
   try { localStorage.removeItem(LS_ABSTRACTS);    } catch(e) {}
   try { localStorage.removeItem(LS_LAST_SEARCH);  } catch(e) {}
-  try { localStorage.removeItem(LS_LLM_SCORES);   } catch(e) {}
-  // Keep libraryCache and llmMemo — they are cross-session knowledge
+  try { localStorage.removeItem(LS_LLM_SCORES);    } catch(e) {}
+  try { localStorage.removeItem(LS_MANUAL_SCORES); } catch(e) {}
+  // Keep libraryCache, llmMemo, extraQueries — they are cross-session knowledge
   allArticles   = [];
   readSet       = new Set();
   abstractCache = {};
   llmScores     = {};
+  manualScores  = {};
   const modal = document.getElementById('library-modal');
   if (modal) modal.classList.remove('open');
   renderTabs();
@@ -1332,7 +1522,13 @@ window.previewLibraryParse = previewLibraryParse;
 window.selectSort             = selectSort;
 window.toggleRelevanceFilter  = toggleRelevanceFilter;
 window.runSearch          = runSearch;
-window.saveApiKeyFromInput = saveApiKeyFromInput;
-window.removeApiKey        = removeApiKey;
-window.enrichLibrary       = enrichLibrary;
-window.runAIEvaluation     = runAIEvaluation;
+window.saveApiKeyFromInput   = saveApiKeyFromInput;
+window.removeApiKey          = removeApiKey;
+window.enrichLibrary         = enrichLibrary;
+window.runAIEvaluation       = runAIEvaluation;
+window.setManualScore        = setManualScore;
+window.clearManualScore      = clearManualScore;
+window.optimizeSearchQueries = optimizeSearchQueries;
+window.applyPendingProposal  = applyPendingProposal;
+window.discardPendingProposal = discardPendingProposal;
+window.clearExtraQueries     = clearExtraQueries;

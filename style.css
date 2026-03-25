@@ -729,6 +729,81 @@ html, body {
 }
 .btn-danger:hover { background: rgba(248,81,73,0.15); }
 
+/* ─── STAR RATING ────────────────────────────────── */
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+}
+.star-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  padding: 2px 1px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.1s, transform 0.1s;
+}
+.star-btn:hover { color: var(--yellow); transform: scale(1.2); }
+.star-btn.filled { color: var(--yellow); }
+.star-clear {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 2px 4px;
+  cursor: pointer;
+  margin-left: 2px;
+  line-height: 1;
+}
+.star-clear:hover { color: var(--red); }
+.tag-manual {
+  background: rgba(210,153,34,0.15);
+  color: var(--yellow);
+  border: 1px solid rgba(210,153,34,0.35);
+}
+
+/* ─── QUERY PROPOSAL ─────────────────────────────── */
+.query-proposal-box {
+  margin-top: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 13px;
+}
+.proposal-analysis {
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.proposal-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.proposal-item {
+  background: var(--surface3);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.proposal-cluster {
+  display: inline-block;
+  font-size: 11px;
+  background: rgba(47,129,247,0.15);
+  color: var(--primary);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
+}
+.proposal-query {
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+  margin-bottom: 2px;
+}
+.proposal-rationale { color: var(--text-muted); font-size: 12px; }
+.proposal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ─── AI EVAL BUTTON ─────────────────────────────── */
 #ai-eval-btn {
   background: linear-gradient(135deg, #7c3aed, #4f46e5);
