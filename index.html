@@ -142,6 +142,27 @@ Voorbeelden:
     </div>
   </div>
 
+  <!-- Export modal -->
+  <div id="export-modal" onclick="if(event.target===this)closeExportModal()">
+    <div class="modal-sheet">
+      <div class="modal-drag"></div>
+      <h2 id="export-header">Exporteer opgeslagen artikelen</h2>
+      <p>Download als <strong>.ris</strong> om direct in Zotero, Mendeley of EndNote te importeren, of kopieer de tekstlijst.</p>
+      <div class="modal-actions" style="margin-bottom:12px">
+        <button class="btn-primary" onclick="downloadRIS()">↓ Download .ris</button>
+        <button class="btn-secondary" onclick="closeExportModal()">Sluiten</button>
+      </div>
+      <strong style="font-size:13px;display:block;margin-bottom:6px">Tekstlijst (kopiëren)</strong>
+      <textarea id="export-txt" class="export-textarea" readonly onclick="this.select()"></textarea>
+      <button class="btn-secondary" style="margin-top:6px" onclick="copyExportText()">📋 Kopieer lijst</button>
+      <hr class="modal-divider">
+      <details>
+        <summary style="font-size:12px;color:#768390;cursor:pointer;padding:4px 0">RIS-broncode bekijken</summary>
+        <textarea id="export-ris" class="export-textarea" readonly onclick="this.select()" style="margin-top:8px;font-size:11px;height:160px"></textarea>
+      </details>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast"></div>
 

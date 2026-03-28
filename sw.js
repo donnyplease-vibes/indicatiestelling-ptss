@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ptss-monitor-v11';
+const CACHE_NAME = 'ptss-monitor-v12';
 const STATIC_ASSETS = [
   './',
   './index.html',

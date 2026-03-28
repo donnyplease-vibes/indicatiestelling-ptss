@@ -728,6 +728,9 @@ function renderFilterBar() {
     `<button class="${relevanceToggleClass}" onclick="toggleRelevanceFilter()">` +
     (hideMinimalRelevance ? '★ Hoog &amp; relevant' : '★ Alle relevantie') +
     `</button>` +
+    (savedSet.size > 0
+      ? `<button class="sort-btn export-btn" onclick="openExportModal()">↓ Exporteer (${savedSet.size})</button>`
+      : '') +
     `</div>`;
 }
 
@@ -1312,6 +1315,83 @@ function clearExtraQueries() {
   showToast('Extra zoekopdrachten verwijderd.');
 }
 
+// ---- Export saved articles ----
+function openExportModal() {
+  const saved = allArticles.filter(a => savedSet.has(articleId(a)));
+  if (!saved.length) { showToast('Geen opgeslagen artikelen om te exporteren.'); return; }
+
+  const modal = document.getElementById('export-modal');
+  const risEl = document.getElementById('export-ris');
+  const txtEl = document.getElementById('export-txt');
+  const hdr   = document.getElementById('export-header');
+
+  hdr.textContent = `${saved.length} opgeslagen artikel${saved.length === 1 ? '' : 'en'}`;
+  risEl.value = generateRIS(saved);
+  txtEl.value = generateTextList(saved);
+  modal.classList.add('open');
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.remove('open');
+}
+
+function generateRIS(articles) {
+  return articles.map(a => {
+    const id    = articleId(a);
+    const abs   = abstractCache[id] || a.abstract || '';
+    const score = manualScores[id] ? `${manualScores[id].score}/5 ster (handmatig)` : llmScores[id] ? `${llmScores[id].score}/10 AI` : '';
+    const cluster = CLUSTERS.find(c => c.id === a.cluster);
+    const lines = [
+      'TY  - JOUR',
+      `TI  - ${a.title || ''}`,
+    ];
+    // Authors: "Last, First et al." → split on ", " carefully
+    if (a.authors) {
+      const raw = a.authors.replace(' et al.', '');
+      for (const au of raw.split(', ').filter(Boolean)) lines.push(`AU  - ${au}`);
+    }
+    if (a.year)    lines.push(`PY  - ${a.year}`);
+    if (a.journal) lines.push(`JO  - ${a.journal}`);
+    if (a.doi)     lines.push(`DO  - ${a.doi}`);
+    if (abs)       lines.push(`AB  - ${abs.replace(/\n/g, ' ')}`);
+    if (cluster)   lines.push(`KW  - ${cluster.label}`);
+    if (score)     lines.push(`N1  - Relevantiescore: ${score}`);
+    lines.push('ER  - ');
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+function generateTextList(articles) {
+  return articles.map((a, i) => {
+    const id    = articleId(a);
+    const score = manualScores[id] ? `${'★'.repeat(manualScores[id].score)}` : llmScores[id] ? `AI ${llmScores[id].score}/10` : '';
+    const doi   = a.doi ? `https://doi.org/${a.doi}` : '';
+    return [
+      `${i + 1}. ${a.title}`,
+      `   ${[a.authors, a.journal, a.year].filter(Boolean).join(' · ')}`,
+      score ? `   ${score}` : '',
+      doi   ? `   ${doi}` : '',
+    ].filter(Boolean).join('\n');
+  }).join('\n\n');
+}
+
+function downloadRIS() {
+  const saved = allArticles.filter(a => savedSet.has(articleId(a)));
+  const content = generateRIS(saved);
+  const blob = new Blob([content], { type: 'application/x-research-info-systems' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'ptss-opgeslagen.ris'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyExportText() {
+  const ta = document.getElementById('export-txt');
+  ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  showToast('Gekopieerd naar klembord');
+}
+
 // ---- Library exclusion modal ----
 function openLibraryModal() {
   document.getElementById('library-modal').classList.add('open');
@@ -1538,3 +1618,7 @@ window.optimizeSearchQueries = optimizeSearchQueries;
 window.applyPendingProposal  = applyPendingProposal;
 window.discardPendingProposal = discardPendingProposal;
 window.clearExtraQueries     = clearExtraQueries;
+window.openExportModal  = openExportModal;
+window.closeExportModal = closeExportModal;
+window.downloadRIS      = downloadRIS;
+window.copyExportText   = copyExportText;
