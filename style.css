@@ -896,6 +896,33 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ─── RESPONSIVE ──────────────────────────────────── */
+/* ─── BACKUP & SYNC ──────────────────────────────── */
+.backup-textarea {
+  width: 100%;
+  height: 70px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: monospace;
+  font-size: 11px;
+  resize: vertical;
+  box-sizing: border-box;
+  margin: 8px 0 6px;
+}
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sync-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
 /* ─── EXPORT ─────────────────────────────────────── */
 .export-btn {
   color: var(--green) !important;

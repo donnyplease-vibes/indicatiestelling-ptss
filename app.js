@@ -284,6 +284,19 @@ const LS_MANUAL_SCORES  = 'ptss_manual_scores';
 const LS_EXTRA_QUERIES  = 'ptss_extra_queries';
 const LS_LLM_MEMO       = 'ptss_llm_memo';
 const LS_LIBRARY_CACHE  = 'ptss_library_cache';
+const LS_GIST_TOKEN     = 'ptss_gist_token';
+const LS_GIST_ID        = 'ptss_gist_id';
+
+// Sleutels die meegaan in back-up/sync (NIET de API-sleutel of gist-token)
+const SYNC_KEYS = [
+  LS_ARTICLES, LS_READ, LS_SAVED, LS_EXCLUDED, LS_ABSTRACTS,
+  LS_LLM_SCORES, LS_MANUAL_SCORES, LS_LLM_MEMO, LS_LIBRARY_CACHE,
+  LS_EXTRA_QUERIES, LS_LAST_SEARCH
+];
+const SNAPSHOT_VERSION = 1;
+const GIST_FILENAME    = 'ptss-state.json';
+let gistSyncTimer = null;
+let isSyncing = false;
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
@@ -295,8 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderArticles();
     updateStatusBar();
     updateApiKeyUI();
+    updateSyncUI();
     setupInstallPrompt();
     checkAutoSearch();
+    autoSyncOnLoad();
   } catch(e) {
     console.error('Init crash:', e);
     const msg = document.getElementById('status-msg');
@@ -338,7 +353,9 @@ function saveState() {
     saveLLMState();
   } catch(e) {
     console.warn('localStorage full?', e);
+    showToast('Let op: opslag bijna vol — maak een back-up.');
   }
+  scheduleGistSync();
 }
 
 function saveLLMState() {
@@ -349,6 +366,265 @@ function saveLLMState() {
     localStorage.setItem(LS_LIBRARY_CACHE, JSON.stringify(libraryCache));
     localStorage.setItem(LS_EXTRA_QUERIES, JSON.stringify(extraQueries));
   } catch(e) {}
+}
+
+// ============================================================
+// BACK-UP & CROSS-DEVICE SYNC
+// Snapshot van alle data (NIET de API-sleutel of gist-token).
+// Lokaal: JSON export/import. Cross-device: privé GitHub Gist.
+// ============================================================
+function buildStateSnapshot() {
+  const data = {};
+  data[LS_ARTICLES]      = allArticles;
+  data[LS_READ]          = [...readSet];
+  data[LS_SAVED]         = [...savedSet];
+  data[LS_EXCLUDED]      = [...excludedSet];
+  data[LS_ABSTRACTS]     = abstractCache;
+  data[LS_LLM_SCORES]    = llmScores;
+  data[LS_MANUAL_SCORES] = manualScores;
+  data[LS_LLM_MEMO]      = llmMemo;
+  data[LS_LIBRARY_CACHE] = libraryCache;
+  data[LS_EXTRA_QUERIES] = extraQueries;
+  data[LS_LAST_SEARCH]   = getLastSearch();
+  return { app: 'ptss-monitor', version: SNAPSHOT_VERSION, exportedAt: new Date().toISOString(), data };
+}
+
+// Voegt een snapshot samen met de huidige staat. Verliest nooit lokale data:
+// bij conflicten wint de lokale waarde, ontbrekende waarden komen erbij.
+function applyStateSnapshot(snap) {
+  const d = (snap && snap.data) || {};
+  if (Array.isArray(d[LS_ARTICLES])) {
+    const map = new Map();
+    for (const a of d[LS_ARTICLES]) map.set(articleId(a), { ...a, isNew: false });
+    for (const a of allArticles)    map.set(articleId(a), a);
+    allArticles = [...map.values()];
+  }
+  if (Array.isArray(d[LS_READ]))     readSet     = new Set([...readSet,     ...d[LS_READ]]);
+  if (Array.isArray(d[LS_SAVED]))    savedSet    = new Set([...savedSet,    ...d[LS_SAVED]]);
+  if (Array.isArray(d[LS_EXCLUDED])) excludedSet = new Set([...excludedSet, ...d[LS_EXCLUDED]]);
+  if (d[LS_ABSTRACTS])     abstractCache = Object.assign({}, d[LS_ABSTRACTS],     abstractCache);
+  if (d[LS_LLM_SCORES])    llmScores     = Object.assign({}, d[LS_LLM_SCORES],    llmScores);
+  if (d[LS_MANUAL_SCORES]) manualScores  = Object.assign({}, d[LS_MANUAL_SCORES], manualScores);
+  if (d[LS_LIBRARY_CACHE]) libraryCache  = Object.assign({}, d[LS_LIBRARY_CACHE], libraryCache);
+  if (d[LS_EXTRA_QUERIES]) {
+    const inc = d[LS_EXTRA_QUERIES];
+    for (const cid of Object.keys(inc)) {
+      if (!extraQueries[cid]) extraQueries[cid] = [];
+      for (const q of (inc[cid] || [])) {
+        if (!extraQueries[cid].some(e => e.general === q.general)) extraQueries[cid].push(q);
+      }
+    }
+  }
+  if (d[LS_LLM_MEMO] && !llmMemo) llmMemo = d[LS_LLM_MEMO];
+  if (d[LS_LAST_SEARCH]) {
+    const cur = getLastSearch();
+    if (!cur || d[LS_LAST_SEARCH] > cur) setLastSearch(d[LS_LAST_SEARCH]);
+  }
+}
+
+function countSnapshot(snap) {
+  const d = (snap && snap.data) || {};
+  return {
+    articles: (d[LS_ARTICLES] || []).length,
+    saved:    (d[LS_SAVED]    || []).length,
+    excluded: (d[LS_EXCLUDED] || []).length,
+  };
+}
+
+function reloadAndRender() {
+  saveState();
+  renderTabs();
+  renderFilterBar();
+  renderArticles();
+  updateStatusBar();
+  if (document.getElementById('library-stats')) updateLibraryStats();
+}
+
+// ---- Lokale JSON back-up ----
+function downloadBackup() {
+  const snap = buildStateSnapshot();
+  const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const today = new Date().toISOString().split('T')[0];
+  a.href = url; a.download = `ptss-backup-${today}.json`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Back-up gedownload');
+}
+
+function importBackupText(text) {
+  let snap;
+  try { snap = JSON.parse(text); }
+  catch(e) { showToast('Ongeldige back-up (geen geldige JSON).'); return; }
+  if (!snap || snap.app !== 'ptss-monitor' || !snap.data) {
+    showToast('Dit lijkt geen PTSS-back-up te zijn.');
+    return;
+  }
+  const before = allArticles.length;
+  applyStateSnapshot(snap);
+  reloadAndRender();
+  const added = allArticles.length - before;
+  const c = countSnapshot(snap);
+  showToast(`Back-up samengevoegd — ${c.articles} artikelen in bestand, ${added} nieuw toegevoegd`);
+}
+
+function importBackupFromUI() {
+  const ta = document.getElementById('backup-textarea');
+  if (ta && ta.value.trim()) { importBackupText(ta.value); ta.value = ''; }
+  else showToast('Plak eerst een back-up of kies een bestand.');
+}
+
+function importBackupFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => importBackupText(String(reader.result || ''));
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ---- GitHub Gist sync ----
+function getGistToken() { return localStorage.getItem(LS_GIST_TOKEN) || ''; }
+function getGistId()    { return localStorage.getItem(LS_GIST_ID) || ''; }
+
+function ghHeaders(token) {
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github+json',
+    'Content-Type': 'application/json'
+  };
+}
+
+async function connectGist() {
+  const input = document.getElementById('gist-token-input');
+  const val = (input && input.value || '').trim();
+  if (!val || val.startsWith('•')) { showToast('Voer een geldige GitHub-token in.'); return; }
+  localStorage.setItem(LS_GIST_TOKEN, val);
+  if (input) input.value = '•'.repeat(16);
+  updateSyncUI();
+  showToast('Token opgeslagen — eerste synchronisatie...');
+  await syncNow();
+}
+
+function disconnectGist() {
+  localStorage.removeItem(LS_GIST_TOKEN);
+  localStorage.removeItem(LS_GIST_ID);
+  const input = document.getElementById('gist-token-input');
+  if (input) input.value = '';
+  updateSyncUI();
+  showToast('Sync ontkoppeld (data blijft lokaal bewaard)');
+}
+
+async function pushToGist(silent) {
+  const token = getGistToken();
+  if (!token) return false;
+  const content = JSON.stringify(buildStateSnapshot());
+  const gistId = getGistId();
+  try {
+    let resp;
+    if (!gistId) {
+      resp = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: ghHeaders(token),
+        body: JSON.stringify({
+          description: 'PTSS Onderzoeksmonitor — synchronisatiestaat (privé)',
+          public: false,
+          files: { [GIST_FILENAME]: { content } }
+        })
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        localStorage.setItem(LS_GIST_ID, d.id);
+      }
+    } else {
+      resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: ghHeaders(token),
+        body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } })
+      });
+    }
+    if (!resp.ok) {
+      if (!silent) showToast(`Sync mislukt (${resp.status}) — token-rechten?`);
+      return false;
+    }
+    updateSyncUI();
+    return true;
+  } catch(e) {
+    if (!silent) showToast('Sync mislukt: ' + e.message);
+    return false;
+  }
+}
+
+async function pullFromGist() {
+  const token = getGistToken();
+  const gistId = getGistId();
+  if (!token || !gistId) return false;
+  try {
+    const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers: ghHeaders(token) });
+    if (!resp.ok) return false;
+    const gist = await resp.json();
+    const file = gist.files && gist.files[GIST_FILENAME];
+    if (!file) return false;
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+      const raw = await fetch(file.raw_url, { headers: { 'Authorization': `Bearer ${token}` } });
+      content = await raw.text();
+    }
+    const snap = JSON.parse(content);
+    applyStateSnapshot(snap);
+    reloadAndRender();
+    return true;
+  } catch(e) {
+    console.warn('pullFromGist error:', e);
+    return false;
+  }
+}
+
+async function syncNow() {
+  if (isSyncing) return;
+  if (!getGistToken()) { showToast('Verbind eerst met een GitHub-token.'); return; }
+  isSyncing = true;
+  updateSyncUI('Synchroniseren...');
+  await pullFromGist();   // haal binnen + voeg samen
+  const ok = await pushToGist(false); // schrijf samengevoegde staat terug
+  isSyncing = false;
+  updateSyncUI();
+  if (ok) showToast('Synchronisatie voltooid');
+}
+
+function scheduleGistSync() {
+  if (!getGistToken()) return;
+  clearTimeout(gistSyncTimer);
+  gistSyncTimer = setTimeout(() => { pushToGist(true); }, 4000);
+}
+
+async function autoSyncOnLoad() {
+  if (!getGistToken()) return;
+  isSyncing = true;
+  updateSyncUI('Synchroniseren...');
+  if (getGistId()) await pullFromGist();
+  await pushToGist(true);
+  isSyncing = false;
+  updateSyncUI();
+}
+
+function updateSyncUI(overrideText) {
+  const token = getGistToken();
+  const status = document.getElementById('sync-status');
+  if (status) {
+    if (overrideText) {
+      status.textContent = overrideText;
+      status.className = 'api-key-status status-ok';
+    } else if (token) {
+      status.textContent = getGistId() ? '✓ Gekoppeld — wijzigingen synchroniseren automatisch' : '✓ Token opgeslagen — nog niet gesynchroniseerd';
+      status.className = 'api-key-status status-ok';
+    } else {
+      status.textContent = 'Niet gekoppeld — data alleen op dit toestel';
+      status.className = 'api-key-status status-none';
+    }
+  }
+  const input = document.getElementById('gist-token-input');
+  if (input && token && !input.value) input.placeholder = '(token opgeslagen)';
 }
 
 function getLastSearch() { return localStorage.getItem(LS_LAST_SEARCH) || null; }
@@ -1622,3 +1898,9 @@ window.openExportModal  = openExportModal;
 window.closeExportModal = closeExportModal;
 window.downloadRIS      = downloadRIS;
 window.copyExportText   = copyExportText;
+window.downloadBackup       = downloadBackup;
+window.importBackupFromUI   = importBackupFromUI;
+window.importBackupFile     = importBackupFile;
+window.connectGist          = connectGist;
+window.disconnectGist       = disconnectGist;
+window.syncNow              = syncNow;

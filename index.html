@@ -103,6 +103,44 @@ Voorbeelden:
         <button class="btn-secondary" onclick="closeLibraryModal()">Sluiten</button>
         <button class="btn-danger" onclick="clearLibraryList()">Bibliotheek wissen</button>
       </div>
+
+      <hr class="modal-divider">
+      <div class="modal-api-section">
+        <strong>Back-up &amp; synchronisatie</strong>
+        <p>
+          Je data staat standaard alleen op dit toestel. Maak een <strong>back-up</strong> als bestand,
+          of koppel een <strong>privé GitHub Gist</strong> om automatisch te synchroniseren tussen je telefoon en laptop.
+        </p>
+        <div class="enrich-row">
+          <button class="btn-secondary" onclick="downloadBackup()">↓ Back-up downloaden</button>
+          <label class="btn-secondary file-label">
+            ↑ Bestand importeren
+            <input type="file" accept="application/json,.json" onchange="importBackupFile(this)" hidden>
+          </label>
+        </div>
+        <textarea id="backup-textarea" class="backup-textarea" placeholder="…of plak hier de inhoud van een back-upbestand en klik Importeren"></textarea>
+        <button class="btn-secondary" onclick="importBackupFromUI()">Geplakte back-up importeren</button>
+
+        <div class="sync-block">
+          <strong style="font-size:13px;display:block;margin:10px 0 4px">Automatische sync (GitHub Gist)</strong>
+          <p style="margin-bottom:8px">
+            Maak een token met scope <strong>gist</strong> via
+            <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=PTSS+sync" target="_blank" rel="noopener">github.com/settings/tokens</a>.
+            De token blijft lokaal; je data komt in een <em>privé</em> gist.
+          </p>
+          <div class="api-key-row">
+            <input type="password" id="gist-token-input" placeholder="ghp_… of github_pat_…" autocomplete="off">
+            <button class="btn-primary" onclick="connectGist()">Koppelen</button>
+            <button class="btn-secondary" onclick="disconnectGist()">Ontkoppelen</button>
+          </div>
+          <div id="sync-status" class="api-key-status status-none">Niet gekoppeld — data alleen op dit toestel</div>
+          <div class="enrich-row">
+            <button class="btn-secondary" onclick="syncNow()">⟳ Nu synchroniseren</button>
+            <span class="enrich-hint">Op je tweede toestel: zelfde token koppelen, dan haalt hij alles op</span>
+          </div>
+        </div>
+      </div>
+
       <hr class="modal-divider">
       <div class="modal-api-section">
         <strong>AI-evaluatie (optioneel)</strong>
