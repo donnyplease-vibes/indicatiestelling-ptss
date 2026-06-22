@@ -1480,7 +1480,10 @@ async function updateLearningMemo(apiKey, evaluatedArticles) {
 // ---- Manual scoring ----
 function setManualScore(id, stars) {
   manualScores[id] = { score: stars, ratedAt: new Date().toISOString() };
+  savedSet.add(id);
+  readSet.add(id);
   saveLLMState();
+  saveState();
   renderArticles();
 }
 
