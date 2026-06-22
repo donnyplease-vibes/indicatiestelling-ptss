@@ -225,8 +225,8 @@ function scoreArticle(article) {
   const hasDomain = domainTerms.some(t => titleText.includes(t) || abstractText.includes(t));
   if (!hasDomain) score = Math.max(0, score - 45);
 
-  // --- Cluster priority (0-20) ---
-  score += CLUSTER_PRIORITY[article.cluster] || 5;
+  // --- Cluster priority (0-20) — best priority wins for multi-cluster articles ---
+  score += Math.max(...articleClusters(article).map(cid => CLUSTER_PRIORITY[cid] || 5));
 
   // --- Citation score (0-10, log-scaled) ---
   if (article.citations != null && article.citations > 0) {
@@ -688,13 +688,26 @@ function isExcluded(article) {
   return false;
 }
 
+function articleClusters(article) {
+  return article.clusters || [article.cluster];
+}
+
 function deduplicateArticles(existing, incoming) {
   const seen = new Map();
   for (const a of existing) seen.set(articleId(a), a);
   const added = [];
   for (const a of incoming) {
     const id = articleId(a);
-    if (!seen.has(id)) { seen.set(id, a); added.push(a); }
+    if (!seen.has(id)) {
+      const entry = { ...a, clusters: [...new Set(articleClusters(a))] };
+      seen.set(id, entry);
+      added.push(entry);
+    } else {
+      // Merge new cluster(s) into existing article's clusters array
+      const prev = seen.get(id);
+      const merged = [...new Set([...articleClusters(prev), ...articleClusters(a)])];
+      seen.set(id, { ...prev, clusters: merged });
+    }
   }
   return { merged: [...seen.values()], added };
 }
@@ -911,7 +924,7 @@ async function runSearch() {
         searchOpenAlex(query, fromDate)
       ]);
       const batch = [...pubmed, ...semantic, ...openalex].map(a => ({
-        ...a, cluster: cluster.id, query, isNew: true
+        ...a, cluster: cluster.id, clusters: [cluster.id], query, isNew: true
       }));
       newArticles = newArticles.concat(batch);
       done++;
@@ -971,7 +984,7 @@ function renderTabs() {
       : (counts[cluster.id] || 0);
     const newCount = cluster.id === 'all'
       ? allArticles.filter(a => a.isNew && !isExcluded(a)).length
-      : allArticles.filter(a => a.cluster === cluster.id && a.isNew && !isExcluded(a)).length;
+      : allArticles.filter(a => a.isNew && !isExcluded(a) && articleClusters(a).includes(cluster.id)).length;
     const isActive = currentCluster === cluster.id;
     const badgeClass = newCount > 0 ? 'badge new' : 'badge';
     const badge = total > 0 ? `<span class="${badgeClass}">${newCount > 0 ? newCount : total}</span>` : '';
@@ -982,7 +995,9 @@ function renderTabs() {
 function countByCluster() {
   const c = {};
   for (const a of allArticles) {
-    if (!isExcluded(a)) c[a.cluster] = (c[a.cluster] || 0) + 1;
+    if (!isExcluded(a)) {
+      for (const cid of articleClusters(a)) c[cid] = (c[cid] || 0) + 1;
+    }
   }
   return c;
 }
@@ -1030,7 +1045,7 @@ function renderFilterBar() {
 function getFilteredArticles() {
   let articles = currentCluster === 'all'
     ? allArticles
-    : allArticles.filter(a => a.cluster === currentCluster);
+    : allArticles.filter(a => articleClusters(a).includes(currentCluster));
 
   if (currentFilter === 'excluded') {
     articles = articles.filter(a => isExcluded(a));
@@ -1138,9 +1153,9 @@ function renderCard(article, idx) {
   const yearTag   = article.year ? `<span class="tag tag-year">${escHtml(article.year)}</span>` : '';
   const citTag    = article.citations != null ? `<span class="tag tag-citations">${article.citations} cit.</span>` : '';
 
-  const cluster = CLUSTERS.find(c => c.id === article.cluster);
-  const clusterLabel = cluster
-    ? `<small class="cluster-label">${escHtml(cluster.shortLabel)}</small>`
+  const clusterIds = articleClusters(article);
+  const clusterLabel = clusterIds.length > 0
+    ? `<small class="cluster-label">${clusterIds.map(cid => { const cl = CLUSTERS.find(c => c.id === cid); return cl ? escHtml(cl.shortLabel) : ''; }).filter(Boolean).join(' · ')}</small>`
     : '';
 
   const readLabel  = isRead  ? 'Gelezen ✓'   : 'Markeer gelezen';
