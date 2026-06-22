@@ -515,6 +515,20 @@ function disconnectGist() {
   showToast('Sync ontkoppeld (data blijft lokaal bewaard)');
 }
 
+// Zoekt een al bestaande sync-gist bij dit account (voor 2e toestel).
+async function ensureGistId(token) {
+  if (getGistId()) return getGistId();
+  try {
+    const resp = await fetch('https://api.github.com/gists?per_page=100', { headers: ghHeaders(token) });
+    if (resp.ok) {
+      const list = await resp.json();
+      const found = (list || []).find(g => g.files && g.files[GIST_FILENAME]);
+      if (found) { localStorage.setItem(LS_GIST_ID, found.id); return found.id; }
+    }
+  } catch(e) { console.warn('ensureGistId error:', e); }
+  return '';
+}
+
 async function pushToGist(silent) {
   const token = getGistToken();
   if (!token) return false;
@@ -585,6 +599,7 @@ async function syncNow() {
   if (!getGistToken()) { showToast('Verbind eerst met een GitHub-token.'); return; }
   isSyncing = true;
   updateSyncUI('Synchroniseren...');
+  await ensureGistId(getGistToken());  // vind bestaande gist (2e toestel)
   await pullFromGist();   // haal binnen + voeg samen
   const ok = await pushToGist(false); // schrijf samengevoegde staat terug
   isSyncing = false;
@@ -602,6 +617,7 @@ async function autoSyncOnLoad() {
   if (!getGistToken()) return;
   isSyncing = true;
   updateSyncUI('Synchroniseren...');
+  await ensureGistId(getGistToken());
   if (getGistId()) await pullFromGist();
   await pushToGist(true);
   isSyncing = false;
