@@ -993,6 +993,7 @@ function renderFilterBar() {
   const filters = [
     { id: 'all',      label: 'Alles' },
     { id: 'new',      label: 'Nieuw' },
+    { id: 'unsaved',  label: 'Nog te lezen' },
     { id: 'saved',    label: 'Opgeslagen' },
     { id: 'unread',   label: 'Ongelezen' },
     { id: 'excluded', label: `Uitgesloten${excludedCount ? ' (' + excludedCount + ')' : ''}` }
@@ -1035,9 +1036,10 @@ function getFilteredArticles() {
     articles = articles.filter(a => isExcluded(a));
   } else {
     articles = articles.filter(a => !isExcluded(a));
-    if (currentFilter === 'new')    articles = articles.filter(a => a.isNew);
-    else if (currentFilter === 'saved')  articles = articles.filter(a => savedSet.has(articleId(a)));
-    else if (currentFilter === 'unread') articles = articles.filter(a => !readSet.has(articleId(a)));
+    if (currentFilter === 'new')       articles = articles.filter(a => a.isNew);
+    else if (currentFilter === 'unsaved') articles = articles.filter(a => !savedSet.has(articleId(a)));
+    else if (currentFilter === 'saved')   articles = articles.filter(a => savedSet.has(articleId(a)));
+    else if (currentFilter === 'unread')  articles = articles.filter(a => !readSet.has(articleId(a)));
     // Optioneel: verberg artikelen met score < drempel
     if (hideMinimalRelevance) articles = articles.filter(a => scoreArticle(a) >= 15);
   }
@@ -1388,7 +1390,7 @@ THEMATISCH RELEVANT: behandelselectie, indicatiestelling, moderatoren TGT-effect
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
@@ -1447,7 +1449,7 @@ async function updateLearningMemo(apiKey, evaluatedArticles) {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 400,
         messages: [{ role: 'user', content: `Schrijf een beknopt leermemo (max 150 woorden) over welke artikelen hoog scoorden en welke inhoudelijke patronen je ziet. Geef extra gewicht aan handmatige beoordelingen (★) boven AI-scores. Dit memo wordt hergebruikt bij volgende evaluatiesessies.\n\nHOOG GESCOORDE ARTIKELEN:\n${examples}${feedbackSection}${prevSection}\n\nFocus op inhoudelijke patronen, niet op procedure.` }]
       })
@@ -1513,7 +1515,7 @@ async function optimizeSearchQueries() {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 800,
         messages: [{ role: 'user', content:
           `Je bent expert in academisch literatuurzoeken. Analyseer de volgende beoordeelde artikelen en stel 2–4 aanvullende zoektermen voor.
